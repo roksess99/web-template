@@ -24,7 +24,10 @@ klant die zijn tabblad sluit heeft wél betaald en hoort zijn mail te krijgen.
 
 ---
 
-## Wat er wettelijk in de bevestiging moet (NL/EU)
+## Wat er in de bevestiging moet (`WETTELIJK`, NL/EU — te bevestigen)
+
+Afgeleid van de informatieplicht bij overeenkomsten op afstand (BW 6:230v,
+Richtlijn 2011/83/EU art. 8 lid 7). Laat de definitieve tekst controleren.
 
 - Wat er besteld is, met aantallen en prijzen per stuk
 - Het totaalbedrag, het btw-bedrag en de verzendkosten apart
@@ -195,8 +198,10 @@ hoort geen opmaak te worden. Dat geldt ook voor wat de leverancier levert.
 
 **Een mislukte mail mag de bestelling niet omgooien.** De betaling is binnen,
 het artikel is verkocht; dat de bevestiging niet wegging is een probleem om op
-te lossen, niet om de afhandeling mee af te breken. Log de fout, markeer dat de
-mail nog moet, en ga door.
+te lossen, niet om de afhandeling mee af te breken. Mail gaat daarom via een
+**outbox**: het record wordt in dezelfde transactie als de statusovergang
+geschreven en daarna los verstuurd, met backoff (`docs/IDEMPOTENCY.md` §
+Mail). Na N mislukte pogingen staat hij in de tegel "vraagt aandacht".
 
 **Maar laat hem ook niet verdwijnen.** Zet een vinkje dat de mail verstuurd is,
 en zet dat vinkje pas ná een geslaagde verzending. Anders stuurt een webhook

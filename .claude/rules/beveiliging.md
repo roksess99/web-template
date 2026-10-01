@@ -1,126 +1,189 @@
 ---
 paths:
   - "src/lib/admin/**"
-  - "src/app/<<beheerpad>>/**"
+  - "src/**/admin/**"
   - "src/app/api/**"
+  - "src/lib/payments/**"
+  - "src/lib/checkout/**"
+  - "src/lib/returns/**"
   - "src/middleware.ts"
   - "src/proxy.ts"
 ---
 
-# Beveiliging — beheerpaneel, webhooks en wat van buiten komt
+# Beveiliging — authenticatie, autorisatie en alles wat van buiten komt
 
-Laadt bij werk aan het beheerpaneel, aan webhooks en aan alles wat invoer van
-buiten accepteert.
+Laadt bij werk aan het beheerpaneel, API-routes, webhooks, checkout en
+publieke formulieren. Het dreigingsmodel staat in `docs/THREAT_MODEL.md`.
 
-## De grondregel
+## Grondregels
 
-**Alles wat van buiten komt is onbetrouwbaar tot het gekeurd is.** Dat is niet
-alleen een formulier: ook de winkelwagen uit localStorage, een querystring, een
-webhook, een antwoord van de leverancier, en een bestand dat iemand uploadt.
+1. **Alles van buiten is onbetrouwbaar tot het gekeurd is**: formulier,
+   querystring, cookie, localStorage-winkelwagen, webhook, leverancierantwoord,
+   upload. Keuren aan de rand, met een schema; daarbinnen getypeerd.
+2. **UI hiding is not authorization.** Een verborgen knop beschermt niets.
+   Elke handeling controleert server-side: wie is dit, mag deze rol dit, en
+   hoort dit object bij deze gebruiker.
+3. **Deny by default.** Een nieuwe route of server-actie is dicht tot er een
+   expliciete rechtencontrole op zit.
 
-Keuren doe je aan de rand, met een schema. Daarbinnen is alles getypeerd.
+## Authenticatie (beheer)
 
-## Beheerpaneel
+- **Wachtwoorden** met een trage, gezoute hash: `scrypt` (in de
+  standaardbibliotheek, geen native module nodig) of Argon2id. Parameters
+  vastleggen en kunnen ophogen; bij inloggen opnieuw hashen als ze verouderd
+  zijn. Minimaal 12 tekens, controle tegen een lijst gelekte wachtwoorden waar
+  mogelijk, geen samenstellingsregels.
+- **MFA verplicht** voor elk beheeraccount (TOTP). Mailadres, wachtwoord én
+  code in **één** formulier: geen half-ingelogde toestand die je moet bewaken.
+  Het TOTP-geheim staat **versleuteld** in de database met een sleutel uit de
+  omgeving; een gebruikte code wordt binnen zijn tijdvenster geweigerd
+  (geen replay).
+- **Herstelcodes**: bij het instellen eenmalig getoond, gehasht opgeslagen,
+  elk één keer bruikbaar, gebruik komt in het auditlog en in een mail aan de
+  beheerder.
+- **Eén melding voor elke misser** ("combinatie onjuist"), en dezelfde
+  responstijd: geen oracle voor bestaande accounts.
+- **Brute force**: limiet per account én per IP, met oplopende vertraging.
+  Blokkeer niet permanent op account (dat is een DoS-knop voor aanvallers).
+- **De eerste beheerder** via een opzetpagina die zichzelf sluit zodra er één
+  bestaat (afgedwongen in de database, niet met een vlag in code). Daarna
+  uitnodigingen met een eenmalige, verlopende token.
 
-- **Buiten de taalstructuur** en op een eigen pad. Niet tweetalig; de beheerder
-  is één persoon.
-- **Op noindex**, en uit de sitemap en robots.
-- **Inloggen met een tweede factor.** Mailadres, wachtwoord én de code uit een
-  authenticator-app, in **één** formulier — een tweetrapsscherm vraagt om een
-  half-ingelogde toestand die je nergens voor nodig hebt en die je wél moet
-  bewaken.
-- **Wachtwoorden met een trage hash** (`scrypt` of `argon2`). Gebruik wat in de
-  standaardbibliotheek zit; een native module valt bij de deploy om.
-- Het tweestapsgeheim staat **versleuteld** in de database, met een sleutel uit
-  de omgeving. Staat het er onversleuteld, dan is een databaselek genoeg om in
-  te loggen.
-- **Herstelcodes** bij het aanmaken, één keer te tonen en gehasht opgeslagen.
-  Zonder dat is een kwijtgeraakte telefoon het einde van het account.
-- **Sessies in de database**, niet alleen in een cookie. Dan kun je ze
-  intrekken. Cookie met `httpOnly`, `secure`, `sameSite`.
-- Verlopen sessies opruimen in de dagelijkse taak — en controleer dat die
-  functie ook écht wordt aangeroepen.
-- **De eerste beheerder** komt uit een opzetpagina die zichzelf sluit zodra er
-  één is. Daarna gaat het met uitnodigingen.
+## Sessies
 
-## Rechten
+- In de database, zodat ze in te trekken zijn. Cookie `HttpOnly`, `Secure`,
+  `SameSite=Lax` of `Strict`, met `__Host-`-prefix waar mogelijk.
+- Sessie-id is willekeurig (≥ 128 bit) en wordt **gehasht** opgeslagen.
+- Nieuwe sessie-id bij inloggen en bij elke rechtenwijziging (geen session
+  fixation). Uitloggen verwijdert de rij, niet alleen de cookie.
+- Inactiviteitstimeout én absolute maximale duur; waarden in DECISIONS (D-07).
+- Verlopen sessies opruimen in de dagelijkse taak — en controleren dat die
+  taak de functie echt aanroept.
 
-Zelfs met één beheerder: leg rechten per onderdeel vast, niet één
-"is-beheerder". Zodra er een tweede persoon bijkomt wil je kunnen zeggen dat
-die wel bestellingen mag zien en geen prijzen mag veranderen.
+## Autorisatie
 
-**Alles wat geld of zichtbaarheid raakt komt in een logboek**: wie, wat,
-wanneer, en waarop. Dat is geen controledrang maar het enige dat een vraag als
-"wie heeft die prijs veranderd" kan beantwoorden.
+- Rechten **per onderdeel** (bestellingen bekijken, prijzen wijzigen,
+  terugbetalen, beheerders beheren), ook met één beheerder.
+- **IDOR**: elk object dat met een id wordt opgehaald, wordt opgehaald *binnen*
+  de scope van de gebruiker (`WHERE id = ? AND owner = ?`), niet eerst
+  opgehaald en dan vergeleken. Publieke toegang tot een bestelling, factuur of
+  retour gaat met een token, nooit met alleen een nummer.
+- **Test per handeling drie gevallen** (`docs/TESTEN.md`):
+
+  | Geval | Verwacht |
+  |---|---|
+  | niet ingelogd | 401 of redirect naar inloggen; geen data, geen bijwerking |
+  | ingelogd, verkeerde rol of ander object | 403 (of 404 om bestaan niet te verraden); geen bijwerking |
+  | bevoegd | de handeling slaagt, met auditregel |
+
+## Destructieve en financiële handelingen
+
+Terugbetalen, annuleren, prijzen wijzigen, beheerder verwijderen, data wissen:
+
+1. Expliciete autorisatie voor precies dit recht.
+2. Het exacte doel (welk object) en bij geld het exacte bedrag en de valuta,
+   **server-side herberekend** — nooit het bedrag uit de browser vertrouwen.
+3. Een bevestigingsstap die het doel en bedrag letterlijk toont.
+4. Een reden, waar die later iets verklaart (terugbetaling, afwijzing,
+   verbergen van een beoordeling).
+5. Een auditregel: wie, wat, wanneer, op welk object, oude en nieuwe waarde.
+6. Een idempotentiesleutel (`docs/IDEMPOTENCY.md`).
+7. Controle van de status van het object vóór de handeling
+   (`docs/STATE_MACHINES.md`).
+
+## Auditlog
+
+- Alles wat geld, prijzen, zichtbaarheid, rechten of persoonsgegevens raakt.
+- **Alleen toevoegen**: geen update of delete vanuit de applicatie.
+- Zichtbaar in het paneel. Geen secrets of volledige persoonsgegevens erin;
+  verwijs naar het object.
+
+## Webverzoeken
+
+- **CSRF**: elke state-wijzigende request via POST/PUT/PATCH/DELETE, met
+  `SameSite`-cookies én een CSRF-token of een `Origin`-controle. Nooit een
+  wijziging via GET.
+- **XSS**: laat de templating escapen; geen `dangerouslySetInnerHTML` of
+  equivalent met data van buiten. Leveranciertekst is ook "van buiten". Mail-
+  HTML ontsmet elke waarde.
+- **Injection**: alleen geparametriseerde queries of een querybuilder. Geen
+  stringconcatenatie van SQL, ook niet voor sorteervelden (allowlist).
+- **Open redirects**: een `returnTo`/`next`-parameter alleen als relatief pad
+  binnen de site, of tegen een allowlist.
+- **SSRF**: de server haalt nooit een URL op die uit invoer komt. Waar dat
+  moet (afbeeldingen van de leverancier): allowlist van hosts, geen redirects
+  naar andere hosts, geen privé-IP-bereiken, timeout en maximale grootte.
+- **Rate limiting** op inloggen, wachtwoordherstel, checkout, kortingscodes,
+  retouraanvraag, contact en alles wat mail verstuurt of een externe call
+  doet. De opslag van de limiet staat niet in het geheugen van één proces als
+  er meerdere processen zijn.
+- **Bestandsuploads** (alleen waar nodig): grootte-limiet, type controleren op
+  inhoud (magic bytes), nieuwe willekeurige naam, opslag buiten de webroot,
+  serveren met `Content-Disposition: attachment` en een eigen content-type.
+- Honeypot-veld kost de klant niets (`AANNAME`: werkt beter dan een captcha —
+  niet gemeten; meet het als misbruik optreedt).
 
 ## Webhooks
 
-- **Controleer dat het bericht echt van de afzender komt.** Een handtekening
-  als de dienst die levert; anders minstens: de status opnieuw opvragen bij de
-  bron in plaats van geloven wat er binnenkomt.
-- **Geloof nooit het bedrag uit de webhook.** Haal de betaling op en vergelijk
-  met wat jij had opgeslagen.
-- **Een webhook kan twee keer komen.** De afhandeling moet dat overleven.
-- Antwoord snel. Lang werk achteraan de rit, niet in het antwoord.
+- **Verifieer de afzender**: handtekening (HMAC, constante-tijdvergelijking,
+  tijdstempel binnen een venster), of — als de provider geen handtekening
+  biedt — behandel de webhook alleen als "er is iets veranderd" en **haal de
+  status zelf op** bij de provider.
+- **Geloof nooit bedrag of status uit de body**; vergelijk met wat de provider
+  op een server-side opvraging zegt en met je eigen snapshot.
+- **Dedupliceer** op het event-id van de provider (unieke sleutel).
+- Antwoord snel; zwaar werk via de outbox. Een tijdelijke fout: non-2xx, zodat
+  de provider opnieuw probeert.
 
 ## Geplande taken
 
-Een adres dat door een cron-taak wordt aangeroepen is voor de buitenwereld
-gewoon een URL. Zet er een token in de header op, en vergelijk dat in
-constante tijd.
+Een cron-URL is voor de buitenwereld een gewone URL: bearer-token in de
+header, vergelijken in constante tijd. De taak claimt zichzelf in de database
+(lease met verlooptijd), zodat twee aanroepen niet dubbel werken.
 
-Laat de taak zichzelf claimen in de database, zodat twee aanroepen niet twee
-keer hetzelfde werk doen.
+## Headers en CSP
 
-## Formulieren en misbruik
-
-- **Een limiet per IP** op alles wat mail verstuurt of een externe call doet:
-  contactformulier, retouraanvraag, adres opzoeken.
-- **Geen oracle.** Een formulier dat op "bestaat niet" anders reageert dan op
-  "bestaat wel maar klopt niet" vertelt een aanvaller welke nummers of
-  mailadressen bestaan. Geef één melding voor beide.
-- Een link met een token erin is een sleutel: lang genoeg, willekeurig, en
-  nooit in een logregel.
-- Honeypot-veld werkt beter dan een captcha en kost de klant niets.
-
-## Headers
-
-Zet in elk geval:
-
-| Header | Waarvoor |
+| Header | Waarde / doel |
 |---|---|
-| `X-Frame-Options: DENY` | je pagina's horen niet in een iframe van derden |
-| `X-Content-Type-Options: nosniff` | de browser mag het bestandstype niet raden |
-| `Referrer-Policy` | de volledige URL niet naar buiten sturen |
-| `Cross-Origin-Opener-Policy` | vensterisolatie |
-| `Permissions-Policy` | camera, microfoon, locatie: uit |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` zodra HTTPS overal werkt |
+| `Content-Security-Policy` | zie hieronder |
+| `X-Content-Type-Options` | `nosniff` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `X-Frame-Options` / `frame-ancestors` | `DENY` / `'none'` |
+| `Cross-Origin-Opener-Policy` | `same-origin` |
+| `Permissions-Policy` | camera, microfoon, geolocatie uit |
 
-Een Content-Security-Policy is waardevol en een eigen klus: hij vraagt meestal
-een nonce per verzoek, en verkeerd ingesteld breekt hij de winkel stil. Doe hem
-bewust, niet als bijvangst.
+**CSP** is een eigen klus: nonce per verzoek voor scripts, `object-src 'none'`,
+`base-uri 'self'`, `form-action` beperkt tot de eigen site en de betaaldienst.
+Eerst `Content-Security-Policy-Report-Only`, meten, dan afdwingen. Verkeerd
+ingesteld breekt hij de checkout stil — dus met een E2E-test erop.
 
 ## Secrets
 
-- `.env` niet in Git. `.env.example` wél — dus daar nooit een echte waarde in.
-- **Een sleutel die ooit in een commit heeft gestaan is gelekt.** Roteren, niet
+- `.env` niet in Git en niet leesbaar voor Claude (hooks). `.env.example` wel —
+  daar alleen namen, nooit waarden.
+- **Een sleutel die ooit in een commit stond is gelekt.** Roteren, niet alleen
   verwijderen.
-- Nooit een secret in een logregel, een foutmelding of een URL.
-- Een testsleutel op de ontwikkelmachine. Staat er een echte, dan verplaatst
-  elke druk op een knop echt geld — en dan is "even testen" een transactie.
+- Nooit een secret in een logregel, foutmelding, URL of clientbundel. Variabelen
+  met een publiek prefix (framework-afhankelijk) zijn publiek.
+- Testsleutels lokaal; een live sleutel op een ontwikkelmachine maakt van
+  "even testen" een transactie.
+- Valideer bij opstart dat alle vereiste variabelen er zijn en de juiste vorm
+  hebben; start anders niet.
 
-## Persoonsgegevens
+## Persoonsgegevens en logging
 
-- Niet in een URL en niet in een logregel. Een querystring staat in de
-  geschiedenis van de browser, in serverlogs en in de verwijzer naar derden.
-- Alleen opslaan wat je nodig hebt, en met een termijn erbij.
-- Zie `docs/PRIVACY.md` — nieuwe kolom met een persoonsgegeven betekent: daar
-  een regel bij.
+- Niet in een URL en niet in een logregel. Log id's, geen mailadressen,
+  adressen, tokens of betaalgegevens. Details: `docs/OBSERVABILITY.md`.
+- Nieuwe kolom met een persoonsgegeven → regel in `docs/PRIVACY.md`.
 
 ## Afhankelijkheden
 
-- `pnpm audit` hoort bij "af" zodra je `package.json` aanraakt.
-- Geen library erbij zonder te vragen. Elke afhankelijkheid is iets dat straks
-  een melding kan geven en dat iemand moet bijwerken.
-- Zit een kwetsbaarheid diep in de boom en is er geen opwaardering, dan een
-  override binnen hetzelfde hoofdnummer — met een comment erbij waarom, en de
-  afspraak dat hij weggaat zodra het tussenliggende pakket bij is.
+- `pnpm audit` schoon zodra je `package.json` aanraakt; lockfile altijd mee
+  committen; installeren met `--frozen-lockfile` in CI.
+- Geen library zonder te vragen (afgedwongen met een `ask`-regel).
+- Een kwetsbaarheid diep in de boom zonder opwaardering: override binnen
+  hetzelfde hoofdnummer, met commentaar waarom en wanneer hij weg kan.
+- Geen `curl … | sh`; installatiescripts van pakketten zo veel mogelijk
+  uitgeschakeld (`GEDOCUMENTEERD`: pnpm 10+ draait ze alleen voor pakketten
+  die expliciet zijn toegestaan — controleer de versie die je gebruikt).

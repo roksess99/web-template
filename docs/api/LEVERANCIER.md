@@ -1,18 +1,24 @@
 # <<LEVERANCIER>> — integratienotities
 
-Bron: `<<naam van de documentatie>>`, aangeleverd <<datum>>.
+Bron: `<<API_DOCUMENTATIE>>`, aangeleverd <<DATUM>>.
 
 | Wat | Waarde |
 |---|---|
-| Host | `<<...>>` |
-| Base path | `<<...>>` |
-| Auth | `<<header of parameter>>` → `<<ENV_SLEUTEL>>` |
-| Rate limit | `<<... per minuut>>` — geldt voor de héle winkel |
+| Host | `<<API_HOST>>` |
+| Base path | `<<API_BASE_PATH>>` |
+| Auth | `<<AUTH_METHODE>>` → `<<ENV_SLEUTEL>>` |
+| Rate limit | `<<RATE_LIMIT>>` — geldt voor de héle winkel |
 | Formaat | JSON / XML. Let op welke numerieke velden als **string** terugkomen |
 
 **Dit bestand is een invulformulier.** Elk antwoord krijgt het woord
-**GEMETEN** met de datum. Wat niet gemeten is, is een aanname — en aannames
-over een leveranciers-API kosten meer tijd dan het bouwen zelf.
+`GEMETEN` met de datum, de omgeving en de waarneming (formaat in
+`docs/AUTHORITY.md`). Wat niet gemeten is, is een aanname — en aannames over
+een leveranciers-API kosten meer tijd dan het bouwen zelf. De lessen met
+`EERDER WAARGENOMEN` komen van een andere leverancier: ze zeggen wat je moet
+meten, niet wat je zult vinden.
+
+Supplier-specifieke details uit dit formulier horen in de adapter en hier —
+nooit in de rest van de documentatie of de code daarbuiten.
 
 ---
 
@@ -22,12 +28,12 @@ Veel groothandels draaien per land een eigen platform met een eigen base path.
 Taal, assortiment én beschikbaarheid van endpoints kunnen per platform
 verschillen.
 
-- [ ] Token werkt op `<<platform>>`
+- [ ] Token werkt op `<<PLATFORM>>`
 - [ ] Welke platformen bestaan er, en welke geven JSON (en niet stilletjes een
       HTML-pagina)?
 - [ ] Is er een testomgeving, of is alles live?
 
-GEMETEN <<datum>>: <<antwoord>>
+GEMETEN <<DATUM>>: <<ANTWOORD>>
 
 ---
 
@@ -36,7 +42,7 @@ GEMETEN <<datum>>: <<antwoord>>
 - [ ] Is er een categorieboom? Hoe diep?
 - [ ] Zijn de categorie-id's **stabiel over de tijd**?
 
-> Reken daar niet op. Eerder gemeten: nummers die in september waren
+> Reken daar niet op. `EERDER WAARGENOMEN`: nummers die in september waren
 > vastgelegd wezen een maand later naar de groep ernaast. Dat is stil kapot — geen fout, de link
 > werkt, hij wijst alleen naar iets anders. **Leg dus geen id's vast in code**
 > als je ze niet hebt gecontroleerd; zoek de groep op naam op in de boom die je
@@ -48,7 +54,7 @@ GEMETEN <<datum>>: <<antwoord>>
 > nachtelijke prijsmeting kunt bouwen. Kan het niet, dan is dat geen detail
 > maar een vorm die je hele navigatie bepaalt.
 
-GEMETEN <<datum>>: <<antwoord>>
+GEMETEN <<DATUM>>: <<ANTWOORD>>
 
 ---
 
@@ -59,11 +65,11 @@ GEMETEN <<datum>>: <<antwoord>>
 - [ ] Werkt zoeken zonder de rest van de context (categorie, voertuig, …)?
 - [ ] Hoe nauwkeurig is het? Zoek op een term en kijk wat er bovenaan staat.
 
-> Zoeken zonder context haalt rommel naar boven. Eerder gemeten: een
+> Zoeken zonder context haalt rommel naar boven. `EERDER WAARGENOMEN`: een
 > gebruikelijke zoekterm gaf als eerste treffer een onderdeeltje van € 0,28. Als je zoekresultaten ergens
 > prominent toont, heb je een ondergrens of een naamfilter nodig.
 
-GEMETEN <<datum>>: <<antwoord>>
+GEMETEN <<DATUM>>: <<ANTWOORD>>
 
 ---
 
@@ -73,12 +79,12 @@ GEMETEN <<datum>>: <<antwoord>>
 - [ ] Wat is het maximum per pagina, en wat gebeurt er als je meer vraagt?
 - [ ] Kun je twee verzoeken tegelijk doen?
 
-> Eerder gemeten: twee gelijktijdige verzoeken op dezelfde categorie met het
+> `EERDER WAARGENOMEN`: twee gelijktijdige verzoeken op dezelfde categorie met het
 > maximum gaven bij één van de twee een HTTP 500 — en de adapter ving dat op met
 > een lege lijst, dus de halve categorie verdween zónder foutmelding. Haal
 > pagina's sequentieel op tot je het tegendeel gemeten hebt.
 
-GEMETEN <<datum>>: <<antwoord>>
+GEMETEN <<DATUM>>: <<ANTWOORD>>
 
 ---
 
@@ -86,12 +92,12 @@ GEMETEN <<datum>>: <<antwoord>>
 
 - [ ] Meet de omvang bij het maximale aantal per pagina.
 
-> Boven een paar megabyte weigeren sommige caches stilletjes. Eerder gemeten:
+> Boven een paar megabyte weigeren sommige caches stilletjes. `EERDER WAARGENOMEN`:
 > een antwoord van 4 MB was te groot voor de cache van het framework, waardoor
 > élke filterklik opnieuw vier megabyte ophaalde. Als dat zo is: een eigen cache
 > van een paar minuten in het geheugen.
 
-GEMETEN <<datum>>: <<antwoord>>
+GEMETEN <<DATUM>>: <<ANTWOORD>>
 
 ---
 
@@ -107,7 +113,7 @@ GEMETEN <<datum>>: <<antwoord>>
 > hoge prijzen. De gangbare conventie: inkoop tussen bedrijven is netto, een
 > adviesprijs voor de consument is bruto. Maar meet het.
 
-GEMETEN <<datum>>: <<antwoord>>
+GEMETEN <<DATUM>>: <<ANTWOORD>>
 
 ---
 
@@ -117,7 +123,7 @@ GEMETEN <<datum>>: <<antwoord>>
       verkoper**?
 - [ ] Als beide: komen die overeen?
 
-> **Eerder gemeten: níet, en dat kostte geld.** Het voorraadgetal bovenin het artikel
+> **`EERDER WAARGENOMEN`: níet, en dat kostte geld.** Het voorraadgetal bovenin het artikel
 > kwam bij de helft van de artikelen niet overeen met de verkopers eronder, en
 > was soms een veelvoud: één artikel meldde 2741 stuks terwijl twintig
 > verkopers samen 981 hadden en de goedkoopste er één had.
@@ -131,7 +137,7 @@ GEMETEN <<datum>>: <<antwoord>>
 > voorraad — en neem prijs, voorraad en levertijd allemaal daarvandaan. Begrens
 > het aantal dat een klant kan bestellen op die voorraad.
 
-GEMETEN <<datum>>: <<antwoord>>
+GEMETEN <<DATUM>>: <<ANTWOORD>>
 
 ---
 
@@ -140,7 +146,7 @@ GEMETEN <<datum>>: <<antwoord>>
 - [ ] Komt er een bruikbare URL mee, of een plaatshouder met een formaatcode?
 - [ ] Zijn de foto's echt, of voor elke categorie hetzelfde generieke bestand?
 
-> Dat laatste komt vaker voor dan je denkt. Eerder gemeten: een categorie-API
+> Dat laatste komt vaker voor dan je denkt. `EERDER WAARGENOMEN`: een categorie-API
 > gaf voor élke categorie exact hetzelfde bestand van 1789 bytes. Controleer de omvang
 > van een paar foto's voordat je ze in je ontwerp opneemt.
 
@@ -149,7 +155,7 @@ GEMETEN <<datum>>: <<antwoord>>
       zijn leverancier niet weggeven, dan moeten de foto's via het eigen
       domein lopen.
 
-GEMETEN <<datum>>: <<antwoord>>
+GEMETEN <<DATUM>>: <<ANTWOORD>>
 
 ---
 
@@ -163,7 +169,7 @@ GEMETEN <<datum>>: <<antwoord>>
 > pagina's tonen dan productnamen in de taal van de leverancier. Besluit dat bewust
 > en zet het in DECISIONS, anders gaat iemand het later "repareren".
 
-GEMETEN <<datum>>: <<antwoord>>
+GEMETEN <<DATUM>>: <<ANTWOORD>>
 
 ---
 
@@ -174,12 +180,16 @@ GEMETEN <<datum>>: <<antwoord>>
 - [ ] Wat gebeurt er bij een aantal dat niet op voorraad is?
 - [ ] Wordt een bestelling met artikelen van twee verkopers **twee**
       bestellingen?
+- [ ] Ondersteunt de bestel-call een **idempotentiesleutel** of een eigen
+      referentie waarop je kunt terugzoeken? Zo niet: hoe stel je na een
+      timeout vast of de bestelling is aangekomen? (`docs/IDEMPOTENCY.md`)
+- [ ] Hoe meldt de leverancier verzending en tracking: webhook, polling, mail?
 
 > ⚠️ **De call die echt bestelt plaatst een echte, factureerbare bestelling.**
 > Draai hem nooit "even ter controle". Zet hem achter een aparte sleutel en
 > geef hem een idempotentiesleutel.
 
-GEMETEN <<datum>>: <<antwoord>>
+GEMETEN <<DATUM>>: <<ANTWOORD>>
 
 ---
 
@@ -188,22 +198,27 @@ GEMETEN <<datum>>: <<antwoord>>
 - [ ] Komen fouten als HTTP-status terug, of als foutcode in een 200-antwoord?
 - [ ] Welke endpoints falen structureel? (Noteer ze — een kapot onderdeel van
       de leverancier mag geen foutpagina in jouw winkel opleveren.)
-- [ ] Wat zegt de API als je over de rate limit gaat?
+- [ ] Wat zegt de API als je over de rate limit gaat? Stuurt hij
+      `Retry-After`?
+- [ ] Typische en trage latentie (p50/p95) per soort call — de basis voor de
+      timeouts in `docs/SUPPLIER_RESILIENCE.md`.
 
-GEMETEN <<datum>>: <<antwoord>>
+GEMETEN <<DATUM>>: <<ANTWOORD>>
 
 ---
 
 ## Mapping naar ons datacontract
 
-Vul dit in zodra `lib/catalog/types.ts` staat. Dit is de tabel waar iemand
+Vul dit in zodra `src/lib/catalog/types.ts` staat. Dit is de tabel waar iemand
 over een jaar naar kijkt als een veld leeg blijkt.
 
 | Ons veld | Bron bij de leverancier | Opmerking |
 |---|---|---|
 | `id` | | |
 | `name` | | |
-| `priceCents` | | integer, in centen |
+| `price` | | `Money`, exacte conversie naar centen |
+| `supplierCost` | | server-only; incl. of excl. btw (§6) |
+| `offerId` | | de gekozen aanbieding |
 | `availability` | | van de gekozen aanbieding |
 | `stock` | | van diezelfde aanbieding |
 | `imageUrl` | | |
@@ -215,4 +230,4 @@ pagina. Dit is de goedkoopste meting die er is en hij vindt altijd iets:
 eerder bleek de navigatie dezelfde lijst drie keer op te halen, en het
 filterblok van een categoriepagina duurder dan de artikelen zelf.
 
-GEMETEN <<datum>>: <<antwoord>>
+GEMETEN <<DATUM>>: <<ANTWOORD>>

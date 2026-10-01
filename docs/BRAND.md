@@ -49,14 +49,14 @@ in tweehonderd componenten.
 
 ```css
 :root {
-  --background: <<...>>;   /* paginavlak */
-  --foreground: <<...>>;   /* gewone tekst */
-  --surface:    <<...>>;   /* kaarten, invoervelden, rustige vlakken */
-  --muted:      <<...>>;   /* secundaire tekst — moet 4,5:1 halen */
-  --border:     <<...>>;   /* lijnen */
-  --danger:     <<...>>;   /* fouten */
-  --success:    <<...>>;   /* bevestiging, "op voorraad" */
-  --warning:    <<...>>;   /* "wordt besteld", let op */
+  --background: <<TOKEN_BACKGROUND>>;   /* paginavlak */
+  --foreground: <<TOKEN_FOREGROUND>>;   /* gewone tekst */
+  --surface:    <<TOKEN_SURFACE>>;   /* kaarten, invoervelden, rustige vlakken */
+  --muted:      <<TOKEN_MUTED>>;   /* secundaire tekst — moet 4,5:1 halen */
+  --border:     <<TOKEN_BORDER>>;   /* lijnen */
+  --danger:     <<TOKEN_DANGER>>;   /* fouten */
+  --success:    <<TOKEN_SUCCESS>>;   /* bevestiging, "op voorraad" */
+  --warning:    <<TOKEN_WARNING>>;   /* "wordt besteld", let op */
 }
 
 .dark {
@@ -123,19 +123,19 @@ Bestanden in `public/brand/`:
 
 | Bestand | Gebruik |
 |---|---|
-| `<<...>>.svg` | Volledig logo, lichte achtergrond |
-| `<<...>>-dark.svg` | Volledig logo, donkere achtergrond |
-| `<<...>>-mark.svg` | Alleen het beeldmerk |
-| `<<...>>-mark-line.svg` | Lijnversie, voor kleine formaten |
+| `<<LOGO_BESTANDSNAAM>>.svg` | Volledig logo, lichte achtergrond |
+| `<<LOGO_BESTANDSNAAM>>-dark.svg` | Volledig logo, donkere achtergrond |
+| `<<LOGO_BESTANDSNAAM>>-mark.svg` | Alleen het beeldmerk |
+| `<<LOGO_BESTANDSNAAM>>-mark-line.svg` | Lijnversie, voor kleine formaten |
 | `favicon.svg` | Browsertabblad |
-| `<<...>>-social.png` | Deelplaatje, 1200×630 |
-| `<<...>>-mail.png` | Voor in de mailsjabloon (PNG, want mailclients kennen geen SVG) |
+| `<<LOGO_BESTANDSNAAM>>-social.png` | Deelplaatje, 1200×630 |
+| `<<LOGO_BESTANDSNAAM>>-mail.png` | Voor in de mailsjabloon (PNG, want mailclients kennen geen SVG) |
 
 **Regels** (door de ontwerper in te vullen, daarna hard):
 
-- Minimale afmeting: `<<...>>`. Daaronder de lijnversie, want fijne vormen
+- Minimale afmeting: `<<LOGO_MIN_AFMETING>>`. Daaronder de lijnversie, want fijne vormen
   lopen dicht en worden modderig.
-- Vrije ruimte rondom: `<<...>>`.
+- Vrije ruimte rondom: `<<LOGO_VRIJE_RUIMTE>>`.
 - Nooit uitrekken, roteren, van schaduw voorzien of inkleuren.
 - Het accent komt **één keer** per logo voor. Twee accentelementen naast elkaar
   maken geen van beide bijzonder.
@@ -146,10 +146,10 @@ Bestanden in `public/brand/`:
 
 | Rol | Lettertype | Gewicht | Opmerking |
 |---|---|---|---|
-| Woordmerk | `<<...>>` | | Alleen in het logo, nooit in de UI |
-| Koppen | `<<...>>` | 700 | `letter-spacing: -0.02em` |
-| Body | `<<...>>` | 400 | `line-height: 1.6` |
-| Labels | `<<...>>` | 600 | hoofdletters, ruime letterafstand |
+| Woordmerk | `<<FONT_WOORDMERK>>` | | Alleen in het logo, nooit in de UI |
+| Koppen | `<<FONT_KOPPEN>>` | 700 | `letter-spacing: -0.02em` |
+| Body | `<<FONT_BODY>>` | 400 | `line-height: 1.6` |
+| Labels | `<<FONT_LABELS>>` | 600 | hoofdletters, ruime letterafstand |
 
 **Typeschaal.** Leg er één vast en blijf erop; losse pixelmaten per scherm zijn
 waaraan je een ontwerp zonder systeem herkent. Een bruikbare schaal:
@@ -173,7 +173,7 @@ derde partij in de privacyverklaring en een verbinding bij het laden.
 
 ```
 spacing  4 · 8 · 12 · 16 · 24 · 32 · 48 · 64
-radius   <<...>> klein (knoppen, velden) · <<...>> groot (kaarten)
+radius   <<RADIUS_KLEIN>> klein (knoppen, velden) · <<RADIUS_GROOT>> groot (kaarten)
 shadow   één zachte schaduw, voor wat echt boven de pagina zweeft
 ```
 
@@ -191,13 +191,13 @@ en dan zijn ze overal hetzelfde.
 
 | Component | Vorm |
 |---|---|
-| Primaire knop | Accentvlak, tekstkleur volgens de contrastmeting, `<<radius>>` |
+| Primaire knop | Accentvlak, tekstkleur volgens de contrastmeting, `<<RADIUS_KLEIN>>` |
 | Secundaire knop | Omlijnd, transparante achtergrond, tekst in `--foreground` |
 | Tertiair | Alleen tekst met onderlijn |
 | Invoerveld | Achtergrond `--surface`, rand `--border`, fout: rand `--danger` **plus** tekst |
 | Statusbadge | Eigen kleurpaar per status, altijd met icoon **én** woord |
 | Kortingsvlag | Accentvlak, kort: `-15%` |
-| Focus | Zichtbare ring in `<<...>>`, nooit `outline: none` zonder vervanging |
+| Focus | Zichtbare ring in `<<KLEUR_FOCUS>>`, nooit `outline: none` zonder vervanging |
 
 **Eén primaire actie per scherm.** Twee accentknoppen naast elkaar laten de
 klant kiezen waar niets te kiezen valt.
@@ -214,7 +214,7 @@ eigen icoon en een eigen woord, niet alleen een kleur.
   springt de pagina bij elke foto.
 - **Geen foto?** Een eigen plaatshouder met het beeldmerk, gedempt. Nooit een
   gebroken plaatje en nooit een lege ruimte.
-- **Sfeerbeeld** (<<wel of niet>>): afspreken met de eigenaar. Gekochte
+- **Sfeerbeeld** (<<SFEERBEELD_JA_NEE>>): afspreken met de eigenaar. Gekochte
   stockfoto's die niet bij het assortiment horen doen meer kwaad dan goed.
 - **Iconen**: één set, één stijl (lijn óf gevuld, niet door elkaar), één
   lijndikte. Liever zelf tekenen dan een tweede set erbij halen.
@@ -223,12 +223,12 @@ eigen icoon en een eigen woord, niet alleen een kleur.
 
 ## Tone of voice
 
-<<Invullen door de eigenaar.>>
+<<TONE_OF_VOICE>>
 
 Wat bij een webshop vrijwel altijd geldt:
 
 - Direct en zakelijk, geen marketingtaal. De klant zoekt een product, geen
-  belevenis. "Past op jouw <<...>>" is beter dan "Ontdek onze collectie".
+  belevenis. "Past op jouw <<PRODUCTSOORT>>" is beter dan "Ontdek onze collectie".
 - Een knop zegt wat er gebeurt: "Bestellen en betalen", niet "Versturen".
 - Een foutmelding zegt wat er misging én wat de klant eraan kan doen. Geen
   excuses, geen vaagheid.
@@ -246,5 +246,5 @@ Wat bij een webshop vrijwel altijd geldt:
 3. Zet de logobestanden in `public/brand/` met de namen uit de tabel.
 4. Vul de lettertypen in, host ze zelf, en zet de typeschaal in de CSS.
 5. Loop de componenttabel langs en leg per rij de echte waarde vast.
-6. Haal elke `<<...>>` uit dit bestand. Wat er dan nog staat, is een gat dat
+6. Haal elke plaatshouder (`<<NAAM>>`) uit dit bestand. Wat er dan nog staat, is een gat dat
    iemand moet dichten.

@@ -4,12 +4,16 @@ Een retour is de afwikkeling van dezelfde koop, niet een nieuw geval. Alles wat
 hier gebeurt raakt geld, en de wet schrijft een flink deel ervan voor.
 
 Dit beschrijft de Nederlandse situatie (BW boek 6, afdeling 2B — de uitwerking
-van de EU-richtlijn consumentenrechten). Verkoop je ook buiten Nederland, kijk
-dan of je markt afwijkt.
+van Richtlijn 2011/83/EU consumentenrechten). Verkoop je ook buiten Nederland,
+kijk dan of je markt afwijkt. Statussen: `docs/STATE_MACHINES.md` § Return en §
+Refund.
 
 ---
 
-## Wat de wet voorschrijft
+## Wat de wet voorschrijft (`WETTELIJK`, NL — te bevestigen)
+
+Samenvatting voor het ontwerp, geen juridisch advies. Laat de teksten op de
+site en in de voorwaarden door een adviseur controleren (D-09).
 
 | Onderwerp | Regel |
 |---|---|
@@ -31,7 +35,9 @@ in de voorwaarden.
 
 ## De vier redenen, en wie wat betaalt
 
-De reden is geen administratie: hij bepaalt het bedrag.
+De reden is geen administratie: hij bepaalt het bedrag. De tabel combineert
+wet (herroeping, non-conformiteit) en `BELEID` (wie de retourzending betaalt
+bij een fout van de winkel) — vastleggen in D-09.
 
 | Reden | Verzendkosten heen | Retourzending |
 |---|---|---|
@@ -83,20 +89,22 @@ Drie knoppen in volgorde: **ontvangen** → **terugbetalen**, of **afwijzen met
 een reden**.
 
 - **Terugbetalen is de enige knop die geld verplaatst.** Dus met een
-  bevestiging én het bedrag erbij.
-- **Het bedrag komt uit de database**, nooit uit het formulier. Lager mag (een
-  artikel dat beschadigd terugkomt is minder waard); hoger nooit.
+  bevestiging die het exacte bedrag toont, een reden en een auditregel.
+- **Het bedrag wordt server-side berekend** uit de bevroren regels (incl.
+  verdeelde code-korting) en eerdere terugbetalingen. Het formulier mag een
+  lager bedrag voorstellen (waardevermindering, met reden); hoger nooit.
 - **Buiten bereik wordt geweigerd, niet afgekapt.** Zie `.claude/rules/geld.md`.
-- **Betaaldienst eerst, database daarna**, met het retournummer als
-  idempotentiesleutel.
+- **Intent eerst, provider dan, uitkomst daarna**: refund `REQUESTED` met
+  `refund.id` als idempotentiesleutel, dan de provider, dan de uitkomst
+  (`docs/PAYMENTS.md`).
 - **Wat er in de administratie komt is wat de betaaldienst zegt te hebben
-  teruggeboekt.**
-- Lukt de boeking wél en de database niet: luid melden, met het kenmerk van de
-  boeking, zodat iemand het met de hand kan rechtzetten.
+  teruggeboekt.** Pas bij `SUCCEEDED` is het retour `REFUNDED`.
+- Timeout of onduidelijke uitkomst: refund `UNKNOWN`, eerst opvragen; **niet**
+  een tweede refund aanmaken.
 - Afwijzen vraagt een reden, en die wordt vastgelegd — en de klant hoort hem.
 
-**Een creditfactuur hoort erbij.** Een terugboeking zonder creditfactuur klopt
-niet in de boekhouding; zie `docs/FACTUUR.md`.
+**Een creditnota hoort erbij**, aangemaakt bij `SUCCEEDED`. Een terugboeking
+zonder creditnota klopt niet in de boekhouding; zie `docs/FACTUUR.md`.
 
 ---
 
@@ -132,5 +140,5 @@ niet in de boekhouding; zie `docs/FACTUUR.md`.
 - [ ] Terugbetalen met bevestiging en bedrag
 - [ ] Het bedrag komt uit de database
 - [ ] Wat geboekt is komt van de betaaldienst
-- [ ] Creditfactuur aangemaakt
+- [ ] Creditnota aangemaakt
 - [ ] De klant krijgt bericht

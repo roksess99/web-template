@@ -9,9 +9,14 @@ paths:
 
 Laadt alleen bij UI-werk.
 
-Dit bestand gaat over **hoe** je bouwt. Twee buren:
+Dit bestand gaat over **hoe** je bouwt. Drie buren:
 `docs/BRAND.md` zegt hoe het eruitziet, `docs/SCHERMEN.md` zegt **wat** er op
-een scherm hoort en waarom. Alle drie lezen voordat je een nieuw scherm maakt.
+een scherm hoort en waarom, `docs/ACCESSIBILITY.md` zegt wat iedereen moet
+kunnen gebruiken. Lees ze voordat je een nieuw scherm maakt.
+
+Elk scherm met data heeft vier toestanden — laden, leeg, fout, gevuld — en een
+handeling heeft een succestoestand. Zie `docs/SCHERMEN.md`. Valt de
+leverancier uit, dan volgt het scherm `docs/SUPPLIER_RESILIENCE.md`.
 
 ## Kleur
 
@@ -47,7 +52,13 @@ niet op de sectie eromheen.
 
 ## Componenten
 
-- Server Component tenzij er interactie nodig is.
+Een deel hiervan gaat uit van een serverrenderend React-framework. Zolang
+D-00 open staat is dat een `AANNAME`; pas het aan zodra het framework vastligt.
+
+- Server-rendered tenzij er interactie nodig is.
+- Componenten importeren domeintypes alleen uit `src/lib/catalog/types.ts` en
+  `src/lib/**` — nooit uit een adapter of een leverancierschema.
+- Een bedrag tonen mag; een bedrag berekenen gebeurt in `src/lib/pricing/`.
 - Een laadscherm hoort bij de route die écht op data wacht, nooit hoog in de
   boom. Te hoog betekent dat een pagina zonder data ook met een skelet begint,
   en dat een 404 als status 200 de deur uit gaat.
@@ -56,28 +67,18 @@ niet op de sectie eromheen.
 - Lege staat is een uitnodiging tot actie, niet alleen "geen resultaten".
 - Artikelnummers en prijzen met `tabular-nums`, zodat kolommen uitlijnen.
 
-## Toegankelijkheid (WCAG 2.2 AA)
+## Toegankelijkheid
 
-- Contrast minimaal 4,5:1 voor tekst. Check elke nieuwe kleurcombinatie.
-- Elke afbeelding heeft `alt`; decoratief krijgt `alt=""`.
-- Focusring altijd zichtbaar. Nooit `outline: none` zonder vervanging.
-- Formulierfouten in tekst én gekoppeld via `aria-describedby`. Niet alleen
-  kleur, en niet alleen een rode rand.
-- **Let op het verschil tussen naam en beschrijving.** Een label dat ook de
-  uitleg omvat maakt die hele uitleg de naam van het veld; een schermlezer
-  leest dan een alinea voor waar één woord hoorde te staan. Label kort, uitleg
-  eronder, gekoppeld met `aria-describedby`.
-- **Een knop die niet kan, zegt waarom.** `disabled` neemt de klik weg — ook
-  die van het toetsenbord — en dan staat er een knop die niets doet en niets
-  uitlegt; dat leest als een storing. Gebruik `aria-disabled` plus een antwoord
-  bij de klik, in een `role="status"` zodat een schermlezer het voorleest
-  zonder de focus te verplaatsen. Echt `disabled` blijft goed waar er niets uit
-  te leggen valt.
-- Bewegende inhoud die langer dan vijf seconden doorloopt moet te stoppen zijn
-  (WCAG 2.2.2). Wil de eigenaar die knop niet in beeld, dan mag hij onzichtbaar
-  zijn tot het toetsenbord hem bereikt — maar hij moet bestaan en focus kunnen
-  krijgen. Respecteer daarnaast `prefers-reduced-motion`.
-- Alles bereikbaar met Tab, in een logische volgorde.
+Doel: WCAG 2.2 AA. **De volledige eisen staan in `docs/ACCESSIBILITY.md`** —
+lees die bij elk nieuw scherm of formulier. De vier die het vaakst misgaan:
+
+- Focusring altijd zichtbaar; alles bereikbaar met Tab in logische volgorde.
+- Formulierfouten in tekst, gekoppeld via `aria-describedby` — niet alleen
+  kleur of een rode rand. Label kort; uitleg als beschrijving, niet in de naam.
+- **Een knop die niet kan, zegt waarom**: `aria-disabled` plus uitleg in een
+  `role="status"`, in plaats van een stille `disabled`.
+- Beweging langer dan vijf seconden is te pauzeren; `prefers-reduced-motion`
+  wordt gerespecteerd.
 
 ## Teksten
 
@@ -99,8 +100,9 @@ niet op de sectie eromheen.
   server dezelfde foto telkens opnieuw op.
 - Lazy loading behalve de eerste rij van het grid en het grootste beeld boven
   de vouw.
-- Geen library groter dan 15 kB gzipped zonder te vragen.
-- Budget: LCP < 2,5 s op 4G, CLS < 0,1.
+- Geen library zonder te vragen; boven 15 kB gzipped altijd met een reden.
+- Budget (`BELEID`): LCP < 2,5 s op een nagebootste 4G-verbinding, CLS < 0,1.
+  Een claim over prestaties zonder meting is een `AANNAME`.
 
 ## SEO
 
