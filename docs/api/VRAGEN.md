@@ -32,6 +32,11 @@ Neem deze over voor zover ze op jouw leverancier slaan:
 9. **Krijgen wij bericht als een artikel vervalt of van nummer verandert?**
 10. **Wat is de rate limit precies, per token of per account, en wat gebeurt er
     als we eroverheen gaan?**
+11. **Kunnen we een eigen referentie of idempotentiesleutel meesturen bij een
+    bestelling, en daarop terugzoeken?** Nodig om na een timeout te weten of
+    een bestelling is aangekomen.
+12. **Is er een statuspagina of storingsmelding?** Dan kan de winkel een
+    storing aan hun kant onderscheiden van een fout aan de onze.
 
 ## Antwoorden die het ontwerp raken
 

@@ -1,112 +1,134 @@
 # Hoe je weet dat het werkt
 
-Er is (nog) geen testrunner. Dat is een keuze die je bewust moet maken en niet
-moet laten gebeuren: een winkel met een handvol schermen en veel externe
-koppelingen heeft meer aan controlescripts en echte doorlopen dan aan honderd
-tests over code die je toch wel ziet werken.
+**Geautomatiseerd testen is de norm voor bedrijfskritieke logica.** In de
+browser kijken, controlescripts en een echte doorloop vóór livegang horen
+erbij — als aanvulling, niet als vervanging. Wat niet getest is, is een
+aanname. Regels voor het schrijven van tests: `.claude/rules/testen.md`.
 
-Wat dan wél, per soort risico.
+De testrunner en E2E-tool zijn een keuze (D-17); dit document beschrijft
+**wat** er getest moet worden.
 
 ---
 
-## 1. Rekenwerk met geld — hier horen echte tests
+## De lagen
 
-Dit is het enige deel waar een testrunner zich meteen terugverdient. Prijs
-berekenen, korting toepassen, btw eruit halen, verzendkosten en drempels: dat
-zijn pure functies zonder database en zonder netwerk, en de fouten zijn
-onzichtbaar tot een klant ze ziet.
+| Laag | Wat | Tegen | Draait |
+|---|---|---|---|
+| **Unit** | Pure functies: geld, btw, korting, verzending, state-machinetabellen | niets extern | elke commit, lokaal en CI |
+| **Integration** | Database, adapter, webhook-handler, outbox, reconciliatie | echte database (zelfde soort en versie); provider- en leverancierstubs met opgenomen antwoorden | elke PR |
+| **Security** | Autorisatie, CSRF, webhookverificatie, IDOR, rate limits | de app in testmodus | elke PR |
+| **E2E** | De klantreis in een echte browser | app + testdatabase + betaaldienst in testmodus of stub | elke PR naar `main`, en vóór elke release |
 
-Test in elk geval de randen, want daar zitten ze:
+## Unit — verplicht voor
 
-- een bedrag van één cent
-- een korting die precies de ondergrens raakt
-- een korting die eroverheen gaat (moet geweigerd worden, niet afgekapt)
-- een bestelling precies op de drempel voor gratis verzending
-- afronding: een percentage dat op een oneven bedrag valt
-- een ontbrekende adviesprijs van de leverancier
+Prijsopbouw, btw, kortingen, verzendkosten, winkelwagentotaal, ordertotaal,
+terugbetalingen. Test de randen:
 
-**Reken één echt geval met de hand na** en zet dat met bedragen in het
-commentaar. Dat is meer waard dan tien gegenereerde gevallen.
+- een bedrag van één cent; een totaal van nul
+- een korting die precies de ondergrens raakt, en één die eroverheen gaat
+  (per artikel begrensd) — en een ongeldig percentage (geweigerd)
+- een bestelling precies op en net onder de gratis-verzenddrempel, met en
+  zonder code ("een korting maakt een bestelling nooit duurder")
+- afronding: een percentage op een oneven bedrag; btw per regel vs. per tarief
+  volgens D-15 — en dat pagina, winkelwagen, checkout, mail en factuur
+  hetzelfde bedrag geven
+- verdeling van een code over regels met verschillende btw-tarieven; de som
+  van de delen is exact het kortingsbedrag
+- een gedeeltelijke terugbetaling met code-aandeel en verzendkosten
+- een ontbrekende adviesprijs; supplier-prijzen als string
+- valuta: rekenen met twee valuta gooit
+- elke state machine: alle toegestane transities slagen, de verboden uit
+  `docs/STATE_MACHINES.md` gooien
 
-## 2. Externe koppelingen — controlescripts
+**Reken één echt geval met de hand na** en zet de bedragen in het commentaar.
 
-Voor elk systeem buiten de winkel een script dat los van de site draait:
+## Integration — verplicht voor
 
-| Script | Controleert |
+| Onderwerp | Gevallen |
 |---|---|
-| database | verbinding én of het schema klopt met de migraties |
-| mail | of er echt een bericht aankomt |
-| betaaldienst | welke sleutel actief is en welke methodes aanstaan |
-| leverancier | of het token werkt en wat een artikel teruggeeft |
+| Database | migraties van leeg tot nu; compare-and-set bij gelijktijdige transitie; unieke sleutels (checkout, event, code per klant, open retour); factuurteller onder gelijktijdigheid |
+| Supplier-adapter | elke fixture uit `docs/SUPPLIER_RESILIENCE.md`: mapping, overslaan, foutclassificatie, breaker, geen retry op schrijfacties |
+| Payment-webhooks | geldig; ongeldige handtekening; dubbel event; events in omgekeerde volgorde; bedrag wijkt af → hold; database faalt → non-2xx en later succes |
+| Reconciliatie | elke rij uit "wanneer lokaal en provider uiteenlopen" (`docs/PAYMENTS.md`) |
+| Idempotentie | elke rij uit `docs/IDEMPOTENCY.md` twee keer, ook parallel → één bijwerking |
+| Outbox | mail faalt → order blijft `PAID`, retry, vlag pas na succes |
 
-**Waarom los van de site:** als er iets niet werkt wil je binnen een minuut
-weten of het aan de winkel ligt of aan de koppeling. Een winkel die op mockdata
-draait ziet er compleet uit, en een beheerpaneel zonder database ook.
+**Gelijktijdigheid bewijzen:** twee verbindingen, dezelfde handeling tegelijk.
+Bij een werkende vergrendeling wacht de tweede en schrijft niets dubbel.
 
-Draai het databasescript na élke deploy en na élke migratie.
+## Security — verplicht voor
 
-## 3. Schermen — in de browser, niet in je hoofd
+- **Autorisatie**, per server-handeling: niet ingelogd → 401/redirect; verkeerde
+  rol of ander object → 403/404; bevoegd → slaagt. Bij de eerste twee: ook
+  geen bijwerking in de database.
+- **IDOR**: order, factuur, retour en statuslink van klant A zijn niet op te
+  halen met de id of het nummer van klant A door klant B, en niet zonder token.
+- **CSRF**: state-wijzigende request zonder token of met vreemde `Origin` wordt
+  geweigerd; GET wijzigt nooit iets.
+- **Webhookverificatie**: zie integration.
+- **Rate limits**: inloggen, code-invoer, retouraanvraag — de N+1e poging wordt
+  geweigerd.
+- **Invoer**: XSS-payload in naam/adres/productnaam wordt geëscaped in pagina,
+  mail en PDF; SQL-metatekens geven geen fout of ander resultaat.
+- **Headers**: aanwezig op een representatieve set routes; CSP blokkeert de
+  checkout niet (E2E).
+
+## E2E — de kritieke reis
+
+```text
+product → winkelwagen → checkout → betaling (testmodus/stub) → webhook → order
+```
+
+Controleer onderweg: hetzelfde bedrag op elk scherm; dubbelklik op "Bestellen
+en betalen" geeft één order; afgebroken betaling geeft een weg terug; de
+bevestigingspagina zonder webhook toont een eerlijke tussenstand; na de
+webhook staat de order op `PAID` en staat er één bevestiging in de outbox.
+
+Daarnaast: retour aanmelden tot en met terugbetaling (beheer), en inloggen
+met MFA.
+
+## Handmatig — aanvullend, met bewijs
 
 Elk scherm dat je af noemt is minstens één keer echt geopend:
 
-- [ ] op telefoonbreedte **en** op een echt toestel
-- [ ] in donkere modus
-- [ ] met het toetsenbord, van boven naar beneden, met zichtbare focus
-- [ ] met een trage verbinding nagebootst — wat staat er dan?
-- [ ] met de vier toestanden: laden, leeg, fout, gevuld
+- [ ] telefoonbreedte **en** een echt toestel; desktop
+- [ ] donkere modus
+- [ ] alleen toetsenbord, van boven naar beneden, focus zichtbaar
+- [ ] schermlezer op de checkout (`docs/ACCESSIBILITY.md`)
+- [ ] trage verbinding nagebootst
+- [ ] de toestanden laden, leeg, fout, gevuld en succes
+- [ ] de console zonder waarschuwingen
 
-Bekijk ook de console. Een waarschuwing die je wegklikt is er morgen nog.
+## Controlescripts — voor koppelingen
 
-## 4. Dingen die alleen fout gaan bij twee tegelijk
+Los van de site, zodat je binnen een minuut weet of het aan de winkel ligt of
+aan de koppeling:
 
-Een controle in code tussen lezen en schrijven houdt niets tegen. Of je fix
-werkt is **meetbaar**, en dat is de moeite waard bij alles wat geld of een
-nummer uitdeelt.
+| Script | Controleert |
+|---|---|
+| database | verbinding én migratiestand gelijk aan de code |
+| mail | dat er echt een bericht aankomt (naar een testadres) |
+| betaaldienst | welke sleutel actief is (test/live) en welke methodes aanstaan |
+| leverancier | dat het token werkt en wat één artikel teruggeeft |
 
-**Hoe je het bewijst:** open twee verbindingen met de database naast elkaar,
-laat allebei dezelfde handeling beginnen, en kijk wat er gebeurt. Bij een
-werkende vergrendeling wacht de tweede tot de eerste klaar is en schrijft dan
-niets. Zet die meting in de documentatie, met de datum.
+## De keten die je niet durft te testen
 
-Doe dit minstens voor: factuurnummers, "één keer per klant", en alles wat een
-terugbetaling kan verdubbelen.
+Een echte betaling, een echte terugbetaling, een echte inkooporder. Die worden
+nooit getest, en draaien dan op de dag dat het moet voor het eerst.
 
-## 5. De keten die je niet durft te testen
+**Eén keer echt, met een klein bedrag, vóór livegang — uitgevoerd door de
+eigenaar, niet door Claude.** Leg vast wanneer en met welk resultaat; zolang
+dat er niet staat, is het niet gebeurd (`docs/CHECKLIST.md`).
 
-Elke winkel heeft handelingen die echt geld verplaatsen: een betaling, een
-terugbetaling, een inkooporder bij de leverancier. Die worden daarom nooit
-getest — en dat betekent dat ze op de dag dat het moet voor het eerst draaien.
+## Teksten en prestaties
 
-**Doe ze één keer echt, met een klein bedrag, vóór de livegang.** Alles
-eromheen testen bewijst niet dat de keten werkt. Zet in de documentatie wanneer
-het gedaan is; zolang dat er niet staat, is het niet gebeurd.
-
-## 6. Teksten
-
-- Alle talen hebben dezelfde sleutels. Controleer dat met een script, niet met
-  het oog — een ontbrekende sleutel hoort de bouw te laten falen.
-- Lees de teksten één keer hardop. Knoppen die zeggen wat ze doen, fouten die
-  zeggen wat de klant kan doen.
-
-## 7. Prestaties
-
-Meet op een nagebootste trage verbinding, niet op je eigen glasvezel. Let op
-het grootste beeld boven de vouw en op wat er verspringt tijdens het laden.
-
-Tel één keer hoeveel verzoeken een paginaweergave bij de leverancier kost. Die
-meting vindt altijd iets.
+- Alle talen hebben dezelfde sleutels — gecontroleerd door een script in CI;
+  een ontbrekende sleutel laat de build falen.
+- Prestaties meten op een nagebootste trage verbinding; tel één keer het
+  aantal leveranciercalls per paginaweergave.
 
 ---
 
-## Wat "af" betekent
-
-- [ ] typecheck en lint groen
-- [ ] de bouw slaagt op de machine waar hij straks draait
-- [ ] `pnpm audit` zonder meldingen
-- [ ] in de browser bekeken, met de lijst uit punt 3
-- [ ] nieuwe beslissing in `DECISIONS.md`, mét reden
-- [ ] nieuw persoonsgegeven of nieuwe browseropslag in `PRIVACY.md`
-- [ ] een meting die je deed staat in het commentaar, met de datum
-
-**"Het werkt bij mij" is geen bevinding.** Zeg wat je hebt gedaan, waar, en wat
-je zag. En wat je niet hebt kunnen controleren hoort er net zo goed bij.
+**"Het werkt bij mij" is geen bevinding.** Zeg wat je hebt uitgevoerd, waar,
+en wat je zag — en wat je niet hebt kunnen controleren hoort er net zo goed
+bij. De Definition of Done staat in `CLAUDE.md`.

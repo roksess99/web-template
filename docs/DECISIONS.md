@@ -1,267 +1,471 @@
-# Openstaande beslissingen — <<SHOP>>
+# Beslissingen — <<SHOP>>
 
-Zolang een beslissing hier op **OPEN** staat: niet gokken, vragen.
+Het geheugen van het project. Elke keuze die niet uit de code af te leiden is,
+staat hier met status, afhankelijkheden, datum en reden. **Zolang een
+beslissing niet `DECIDED` is: niet gokken, vragen** — ook als het antwoord
+voor de hand lijkt te liggen. Werk dat ervan afhangt blijft liggen.
 
-Dit bestand is het geheugen van het project. Elke keuze die niet uit de code
-af te leiden is hoort hier, met de reden erbij en met de datum. Een beslissing
-zonder reden is over drie maanden niet van een toevalligheid te onderscheiden,
-en dan wordt hij bij de eerste tegenslag omgegooid.
+## Statussen
 
-**Vorm van een vastgestelde beslissing:**
+| Status | Betekenis | Verplicht |
+|---|---|---|
+| `OPEN` | Nog niet beantwoord; er ontbreekt informatie (meting, offerte, advies) | — |
+| `BLOCKED` | Wacht op een andere beslissing | `Depends on` met minstens één niet-`DECIDED` beslissing |
+| `READY` | Afhankelijkheden `DECIDED`, informatie compleet; alleen het antwoord van de eigenaar ontbreekt | alle `Depends on` `DECIDED` |
+| `DECIDED` | Beantwoord | `Decided` (datum), reden, en het verworpen alternatief |
+| `SUPERSEDED` | Vervangen | `Superseded by` |
 
-```
-## 7. Korte titel — VASTGESTELD 2026-01-31
+Claude zet een beslissing nooit zelf op `DECIDED`. Claude mag `BLOCKED` →
+`READY` voorstellen als de afhankelijkheden beslist zijn.
+`node scripts/validate-template.mjs` controleert nummers, statussen en
+afhankelijkheden.
+
+**Vorm van een beantwoorde beslissing** (voorbeeld):
+
+```text
+## D-99 · Korte titel
+
+- **Status:** DECIDED
+- **Depends on:** D-01
+- **Decided:** 2026-01-31
 
 Wat er besloten is, in één alinea.
 
 **Waarom dit en niet het alternatief.** Het alternatief benoemen is het
 belangrijkste deel: dat is wat je later opnieuw zou overwegen.
 
-GEMETEN 2026-01-31: het getal of de proef waarop het rust.
+GEMETEN 2026-01-31 — omgeving en waarneming waarop het rust.
 
-### Wat er niet in zit
-Wat bewust is overgeslagen, zodat het later geen vergeten werk lijkt.
+**Wat er niet in zit:** wat bewust is overgeslagen.
+```
+
+## Volgorde
+
+```text
+D-00 framework/hosting ──┬─► D-05 betaaldienst ──► D-09 retouren
+                         ├─► D-06 database ──► D-07 beheer, D-19 backup/herstel
+                         ├─► D-17 CI/CD          D-18 observability
+D-01 leverancier ────────┼─► D-02 assortiment, D-04 inkoop, D-13 verzending
+                         ├─► D-16 kostprijs ──► D-03 prijsopbouw ──► D-08 kortingen
+                         └─► D-22 voorraad en snapshot
 ```
 
 ---
 
-## 0. Framework en hosting — OPEN
+## D-00 · Framework en hosting
 
-De afweging zoals hij eerder viel, voor een serverrenderend framework op
-gedeelde hosting:
+- **Status:** OPEN
+- **Depends on:** —
 
-- **Serverrendering is voor een webshop geen luxe.** Productpagina's moeten
-  door een zoekmachine te lezen zijn, en de prijs mag niet pas na een
-  JavaScript-ronde verschijnen.
-- **Gedeelde hosting is goedkoop en knijpt.** Lees `docs/HOSTING.md` vóór de
-  keuze: het aantal processen is er begrensd, native modules vallen om, en de
-  bouwstap kan er anders aflopen dan op je eigen machine.
-- **Eén taal voor front- en backend** scheelt een hele categorie fouten bij
-  het rekenen met geld, omdat dezelfde functie beide kanten bedient.
+Eerdere afweging voor een serverrenderend framework op gedeelde hosting:
+serverrendering is voor een webshop geen luxe (vindbaarheid, prijs zonder
+JavaScript-ronde); gedeelde hosting is goedkoop en knijpt (`docs/HOSTING.md`:
+processen, native modules, symlinks); één taal voor front- en backend laat de
+browser en de server dezelfde geldfunctie gebruiken.
 
-**Te beantwoorden:** framework, hostingpartij, en of de bouw op de server
-draait of dat je een gebouwde map uploadt.
+Delen van de template gaan uit van een serverrenderend React-framework met
+pnpm (`.claude/launch.json`, `.env.example`, `frontend.md`). Dat is een
+`AANNAME` die met deze beslissing bevestigd of aangepast wordt.
 
----
-
-## 1. Welke leverancier, en wat kan die API echt? — OPEN
-
-Niet de verkooppraat maar het gemeten gedrag. Loop `docs/api/LEVERANCIER.md`
-helemaal af vóórdat er een regel adaptercode komt.
-
-Drie dingen die eerder pas achteraf bleken en het ontwerp raakten:
-
-1. **Een catalogus is niet altijd te bladeren.** Eén van de twee API's daar kon
-   alleen artikelen tonen bij een gekozen auto. Dat betekent: geen
-   "alle artikelen"-pagina, geen aanbiedingenlijst, geen prijsmeting over die
-   groep. Dat soort beperking bepaalt je navigatie en dus je hele UI.
-2. **Meerdere verkopers per artikel.** Dan is "de prijs" een keuze en geen
-   gegeven, en hangt de voorraad aan diezelfde keuze.
-3. **Taal.** Artikelnamen komen uit de API en zijn niet te vertalen. Een
-   tweetalige winkel heeft dus eentalige productnamen. Besluit dat bewust.
-
-**Te beantwoorden:** welke API, welk token per onderdeel, rate limit,
-dekking van het assortiment, en of bestellen via de API kan.
+**Te beantwoorden:** framework; hostingpartij; bouwen op de server of een
+gebouwd artefact uploaden; is een webhook-URL van buiten bereikbaar. Meet de
+punten uit `docs/HOSTING.md` § 9.
 
 ---
 
-## 2. Wat verkopen we wel en niet? — OPEN
+## D-01 · Welke leverancier, en wat kan die API echt?
 
-Een leverancier biedt bijna altijd meer dan je wilt verkopen. Zonder een harde
-grens staat er na een update ineens iets in je winkel waar je garantie- en
-retourteksten niet op kloppen.
+- **Status:** OPEN
+- **Depends on:** —
 
-**Leg het vast als allowlist in code**, niet als filter in de navigatie: ook
-een directe URL naar een artikel buiten het assortiment hoort niets op te
-leveren.
+Niet de verkooppraat maar het gemeten gedrag: `docs/api/LEVERANCIER.md`
+helemaal invullen vóór er adaptercode komt. Lessen uit een vorig project
+(`EERDER WAARGENOMEN`): een catalogus is niet altijd te bladeren; meerdere
+verkopers per artikel maken "de prijs" een keuze; artikelnamen zijn niet te
+vertalen.
+
+**Te beantwoorden:** welke API; welk token per onderdeel; rate limit; dekking
+van het assortiment; bestellen via de API; idempotentie of eigen referentie
+bij bestellen.
+
+---
+
+## D-02 · Wat verkopen we wel en niet?
+
+- **Status:** BLOCKED
+- **Depends on:** D-01
+
+Een harde grens als **allowlist in code**, niet als filter in de navigatie:
+ook een directe URL naar een artikel buiten het assortiment levert niets op.
 
 **Te beantwoorden:** welke productgroepen, welke bewust niet, en wat er gebeurt
-met een groep die leeg blijft (een eerlijke lege staat, geen verzonnen aanbod).
+met een groep die leeg blijft.
 
 ---
 
-## 3. Van inkoopprijs naar verkoopprijs — OPEN
+## D-03 · Van inkoopprijs naar verkoopprijs
 
-Dit is de beslissing waar het meeste geld in zit en die het vaakst te laat
-wordt genomen.
+- **Status:** BLOCKED
+- **Depends on:** D-01, D-16
 
-Wat je bij de leverancier aantreft en uit elkaar moet houden:
+De beslissing waar het meeste geld in zit. Inkoop is meestal excl. btw en
+advies meestal incl. (`EERDER WAARGENOMEN`: weken 21 % te hoge prijzen) —
+controleer met een schermafdruk van het platform. Opslag per groep werkt beter
+dan één percentage; de sleutel van de opslag moet overal gelijk zijn.
 
-- **De inkoopprijs is bijna altijd exclusief btw**, de adviesprijs bijna altijd
-  inclusief. Dat verschil is eerder pas na weken gezien, met 21% te hoge
-  prijzen tot gevolg. Toon een schermafdruk van het platform van de
-  leverancier naast je eigen berekening voordat je dit afsluit.
-- **Een opslag per groep** werkt beter dan één percentage voor alles: kleine
-  artikelen dragen een veel hogere opslag dan grote.
-- **De sleutel waar die opslag aan hangt moet overal gelijk zijn.** Hangt hij
-  aan de categorie, en komt een artikel via het zoekveld binnen zonder
-  categorie, dan rekent de kassa een ander bedrag dan de pagina toonde.
-- **Een ondergrens is noodzakelijk.** Een korting mag de marge opeten, nooit
-  meer dan dat.
-
-**Te beantwoorden:** vaste opslag of per groep, waar de regel aan hangt, wat de
-ondergrens is, en wat er gebeurt als de leverancier geen adviesprijs levert.
+**Te beantwoorden:** vaste opslag of per groep; waar de regel aan hangt; wat er
+gebeurt zonder adviesprijs; minimummarge.
 
 ---
 
-## 4. Wie koopt er in: een mens of de code? — OPEN
+## D-04 · Wie koopt er in: een mens of de code?
 
-Automatisch doorbestellen bij de groothandel klinkt als het hele punt van
-dropshipping en is het grootste risico in het systeem: één fout in het aantal
-of het artikelnummer is een echte, factureerbare bestelling.
+- **Status:** BLOCKED
+- **Depends on:** D-01
 
-Eerder bleef dit bewust **handwerk** zolang de eigenaar annuleringen van tien
-minuten wilde kunnen honoreren. Voor een beginnende winkel is dat de goede
-keuze: het dwingt de eigenaar langs elke bestelling.
+Automatisch doorbestellen is het grootste risico in het systeem. Eerder bleef
+het bewust handwerk zodat annuleringen binnen minuten te honoreren waren; voor
+een beginnende winkel de aanbevolen start. Automatiseren kan pas met een aparte
+sleutel, een idempotente bestel-call en de `UNKNOWN`-afhandeling uit
+`docs/STATE_MACHINES.md`.
 
-**Als je het ooit automatiseert:** de call die echt bestelt mag nooit "even ter
-controle" gedraaid worden, hoort achter een aparte sleutel, en krijgt een
-idempotentiesleutel zodat twee pogingen niet twee bestellingen opleveren.
-
-**Te beantwoorden:** met de hand of automatisch, en zo ja: wanneer precies, en
-wat er gebeurt als de leverancier de bestelling weigert nadat de klant betaald
-heeft.
+**Te beantwoorden:** handmatig of automatisch; annuleringsvenster tussen
+`PAID` en `FULFILLMENT_PENDING`; wat er gebeurt als de leverancier weigert
+nadat de klant betaald heeft.
 
 ---
 
-## 5. Betaaldienst — OPEN
+## D-05 · Betaaldienst
 
-**Te beantwoorden:** welke dienst, welke methodes, en of je de webhook kunt
-ontvangen (dat laatste bepaalt of een betaling die buiten de browser
-terugkomt wel wordt afgehandeld).
+- **Status:** BLOCKED
+- **Depends on:** D-00
 
-Drie dingen die algemeen gelden:
-
-- Het bedrag komt van de server, nooit uit de browser.
-- De bevestigingsmail hangt aan de betaalstatus, niet aan de terugkeerpagina:
-  een klant die zijn tabblad sluit heeft wél betaald.
-- Een webhook kan twee keer komen. De afhandeling moet dat overleven.
+**Te beantwoorden:** welke dienst en methodes; webhook met handtekening of
+alleen "opvragen"; ondersteunt hij idempotentiesleutels; mapping van zijn
+statussen naar `docs/STATE_MACHINES.md` § Payment; geldigheid van een
+betaalpoging; zijn rol onder de AVG; toegankelijkheid van zijn betaalpagina;
+zijn bestellingen van € 0 toegestaan. Architectuur: `docs/PAYMENTS.md`.
 
 ---
 
-## 6. Waar leven de bestellingen? — OPEN
+## D-06 · Database
 
-Begin eenvoudig, maar weet wanneer eenvoudig niet meer kan. Bestellingen als
-JSON-bestanden op de schijf werken verrassend lang — tot de eerste **teller**: factuurnummers moeten opeenvolgend zijn zonder gaten, en
-"één kortingscode per klant" is niet af te dwingen zonder iets dat twee
-gelijktijdige verzoeken uit elkaar houdt.
+- **Status:** BLOCKED
+- **Depends on:** D-00
 
-**De vuistregel:** zodra twee verzoeken tegelijk hetzelfde nummer kunnen
-krijgen, heb je een database met transacties nodig. Niet eerder, maar dan ook
-echt.
+Dat er een database met transacties komt staat vast (D-25). Hier gaat het om
+**welke**, en hoe migraties lopen.
 
-**Te beantwoorden:** welke database, en wie de migraties draait (op de server
-of met de hand — dat laatste betekent dat de code en de database uit de pas
-kunnen lopen bij een deploy).
+**Te beantwoorden:** welk systeem en welke versie; wat de hosting toestaat
+(gemeten op een wegwerptabel); wie migraties draait in productie (pipeline of
+mens); hoe point-in-time-herstel werkt.
 
 ---
 
-## 7. Beheerpaneel — OPEN
+## D-07 · Beheerpaneel, inloggen en rechten
 
-**Te beantwoorden:** komt er een, waar leeft hij (eigen route, buiten de
-taalstructuur), hoe wordt er ingelogd, en wie mag wat.
+- **Status:** BLOCKED
+- **Depends on:** D-06
 
-Wat goed uitpakt: inloggen vraagt mailadres, wachtwoord én een code
-uit een authenticator-app in **één** formulier — een tweetrapsscherm vraagt om
-een half-ingelogde toestand die je nergens voor nodig hebt. Verder: elke
-handeling die geld of zichtbaarheid raakt in een logboek, met wie het deed.
+Uitgangspunten staan in `.claude/rules/beveiliging.md` (MFA verplicht, sessies
+in de database, rechten per onderdeel, audit).
 
----
-
-## 8. Kortingen en acties — OPEN
-
-> De regels en de rekenvolgorde staan uitgewerkt in `docs/PRIJZEN.md`; hier
-> hoort alleen wat jij ervan kiest.
-
-**Te beantwoorden:** op welk niveau kortingen kunnen (één artikel, een groep,
-een soort), en of er kortingscodes komen.
-
-Wat juridisch vastligt in de EU en dus het ontwerp bepaalt: een aangekondigde
-prijsverlaging ("van/voor") moet de **laagste prijs van de afgelopen 30 dagen**
-als referentie gebruiken. Dat betekent dat je die prijzen moet meten en
-bewaren vóórdat een actie begint, anders mag die doorgestreepte prijs er niet
-staan. Begin daar vroeg mee: een geschiedenis die je vandaag niet opbouwt heb
-je over dertig dagen nog steeds niet.
+**Te beantwoorden:** pad van het paneel; welke rechten bestaan; sessieduur
+(inactief en absoluut); wie mag terugbetalen en tot welk bedrag zonder tweede
+persoon.
 
 ---
 
-## 9. Retourneren — OPEN
+## D-08 · Kortingen en acties
 
-> De stroom en de wettelijke eisen staan in `docs/RETOUREN.md`.
+- **Status:** BLOCKED
+- **Depends on:** D-03
 
-**Te beantwoorden:** hoe een klant een retour aanmeldt, en hoe het geld
-terugkomt.
+Regels en rekenvolgorde: `docs/PRIJZEN.md`. De "van"-prijs vraagt een
+prijsgeschiedenis die loopt vóór een actie begint — begin vroeg met meten.
 
-Wat in Nederland (BW 6:230m e.v.) vastligt en in de knoppen terechtkomt:
-
-- 14 dagen bedenktijd, zonder reden, met een modelformulier dat beschikbaar
-  moet zijn.
-- Bij volledige herroeping gaan ook de **oorspronkelijke verzendkosten** terug
-  (de goedkoopste standaardmethode).
-- Terugbetalen binnen 14 dagen, maar je mag wachten tot het pakket terug is.
-- Waardevermindering mag in mindering worden gebracht.
-
-Praktisch: terugbetalen via de oorspronkelijke betaling scheelt het uitvragen
-van een rekeningnummer, en controleer een retouraanvraag altijd op
-**ordernummer én mailadres** — een ordernummer alleen is te raden.
+**Te beantwoorden:** niveau van acties (artikel, groep, soort); komen er
+kortingscodes; "één keer per klant" op welke sleutel.
 
 ---
 
-## 10. Privacy en cookies — OPEN
+## D-09 · Retourneren
 
-**Te beantwoorden:** welke gegevens je bewaart, hoe lang, en of er een
-toestemmingsbanner nodig is.
+- **Status:** BLOCKED
+- **Depends on:** D-05
 
-Twee vragen die vaak door elkaar lopen en apart beantwoord moeten worden:
+Wettelijke kaders en stroom: `docs/RETOUREN.md`.
 
-1. **Wat komt er op het apparaat van de bezoeker?** Dat bepaalt of er een
-   banner moet komen. Noodzakelijke opslag (winkelwagen, taal, thema) mag
-   zonder toestemming.
-2. **Wat bewaren wij op onze server?** Dat bepaalt wat er in de
-   privacyverklaring moet staan.
-
-Zodra er iets bijkomt dat geen van beide is — analytics, een advertentiepixel,
-een ingesloten video, een chatwidget — is een banner **mét voorafgaande
-blokkering** verplicht. Zie `docs/PRIVACY.md` voor de werkwijze.
+**Te beantwoorden:** hoe een klant aanmeldt; wie de retourzending betaalt bij
+een fout van de winkel; terugbetalen na ontvangst of na verzendbewijs;
+waardevermindering ja/nee en hoe vastgesteld.
 
 ---
 
-## 11. Marketingmail — OPEN
+## D-10 · Privacy en cookies
 
-**Te beantwoorden:** komt er een nieuwsbrief, en zo ja hoe wordt toestemming
-vastgelegd.
+- **Status:** BLOCKED
+- **Depends on:** D-01, D-05, D-18
 
-Let op het verschil: een bevestigingsmail en een beoordelingsuitnodiging vallen
-onder de klantrelatie en mogen zonder toestemming vooraf. Een aanbiedingsmail
-niet. Adressen verzamelen "voor later" mag niet — je moet het doel hebben
-voordat je verzamelt.
+Werkwijze en dataflows: `docs/PRIVACY.md`.
 
----
-
-## 12. Beoordelingen — OPEN
-
-**Te beantwoorden:** komen ze er, en hoe voorkom je dat ze verzonnen zijn.
-
-Wat vastligt: selectief publiceren (alleen de goede tonen) is een oneerlijke
-handelspraktijk. Een uitnodiging per bestelling, met een token in de link als
-bewijs van aankoop, en verbergen alleen met een vastgelegde reden.
-
-Geen sterrengemiddelde in de zoekmachinemarkering zolang er geen echte
-beoordelingen zijn — verzonnen cijfers zijn reden om de markering van de hele
-site te negeren.
+**Te beantwoorden:** bewaartermijnen per gegeven; komt er analytics en zo ja
+welke soort; is er een toestemmingsbanner nodig; wie bevestigt de
+privacyverklaring juridisch.
 
 ---
 
-## 13. Verzending — OPEN
+## D-11 · Marketingmail
 
-**Te beantwoorden:** welke vervoerder, welk tarief, vanaf welk bedrag gratis,
-en wat er gebeurt bij een bestelling uit meerdere groepen (die kan bij twee
-verschillende groothandels vandaan komen en dus twee pakketten worden).
+- **Status:** OPEN
+- **Depends on:** —
+
+Transactiemail mag zonder toestemming vooraf, een aanbiedingsmail niet
+(`WETTELIJK`, te bevestigen). Adressen verzamelen "voor later" kan niet.
+
+**Te beantwoorden:** komt er een nieuwsbrief; hoe wordt toestemming
+vastgelegd; aparte verzendende mailbox.
 
 ---
 
-## Vastgesteld
+## D-12 · Beoordelingen
 
-| Datum | Beslissing | Reden |
+- **Status:** OPEN
+- **Depends on:** —
+
+Selectief publiceren is een oneerlijke handelspraktijk (`WETTELIJK`, te
+bevestigen). Uitnodiging per bestelling met een token; verbergen alleen met
+reden; geen sterrengemiddelde in de markering zonder echte beoordelingen.
+
+**Te beantwoorden:** komen ze er; eigen systeem of een dienst.
+
+---
+
+## D-13 · Verzending
+
+- **Status:** BLOCKED
+- **Depends on:** D-01
+
+**Te beantwoorden:** vervoerder en tarieven; drempel voor gratis verzending;
+bestelling uit meerdere bronnen (twee pakketten, één of twee keer
+verzendkosten); na hoeveel dagen geldt een zending als afgeleverd zonder
+melding.
+
+---
+
+## D-14 · Valuta en markten
+
+- **Status:** OPEN
+- **Depends on:** —
+
+Het geldmodel draagt altijd een valuta (`.claude/rules/geld.md`).
+
+**Te beantwoorden:** één valuta of meerdere; één land of meerdere (btw-tarieven
+en regels per land); prijzen per markt.
+
+---
+
+## D-15 · Btw-berekening, afronding en kortingsverdeling
+
+- **Status:** OPEN
+- **Depends on:** —
+
+Laten bevestigen door de boekhouder; daarna één functie overal.
+
+**Te beantwoorden:** btw per regel of per tarief over het totaal; afronding
+(half-up, bankers); verdeling van een orderkorting (proportioneel, methode voor
+de rest); btw op verzendkosten bij gemengde tarieven.
+
+---
+
+## D-16 · Kostprijs (landedCost) en ondergrens
+
+- **Status:** BLOCKED
+- **Depends on:** D-01
+
+Tot deze beslissing is `landedCost = supplierCost` een benoemde aanname.
+
+**Te beantwoorden:** wat telt mee in de kostprijs (inkomende verzending,
+betaalkosten per transactie, toeslagen, retourrisico); per artikel of als
+opslag; wat de ondergrens voor acties is.
+
+---
+
+## D-17 · CI/CD, testtools en omgevingen
+
+- **Status:** BLOCKED
+- **Depends on:** D-00
+
+Architectuur: `docs/CI_CD.md`; teststrategie: `docs/TESTEN.md`.
+
+**Te beantwoorden:** CI-platform; test- en E2E-runner; komt er een staging;
+hoe wordt productie-uitrol goedgekeurd.
+
+---
+
+## D-18 · Observability-tooling
+
+- **Status:** BLOCKED
+- **Depends on:** D-00
+
+Eisen: `docs/OBSERVABILITY.md`.
+
+**Te beantwoorden:** waar logs heen gaan en hoe lang; error tracking; uptime-
+monitor; wie alerts ontvangt.
+
+---
+
+## D-19 · Backup- en hersteldoelen
+
+- **Status:** BLOCKED
+- **Depends on:** D-06
+
+Eisen en plaatshouders: `docs/DISASTER_RECOVERY.md`.
+
+**Te beantwoorden:** RPO, RTO, backupfrequentie, retentie, offsite-locatie,
+interval van de restoretest, incident-eigenaar.
+
+---
+
+## D-20 · Toegankelijkheid: juridische toepasselijkheid
+
+- **Status:** OPEN
+- **Depends on:** —
+
+Het technische doel staat vast (D-28). Deze vraag gaat over de wet:
+`docs/ACCESSIBILITY.md`.
+
+**Te beantwoorden:** valt de winkel onder de European Accessibility Act of een
+vrijstelling; is een toegankelijkheidsverklaring nodig.
+
+---
+
+## D-21 · Factuurbeleid
+
+- **Status:** OPEN
+- **Depends on:** —
+
+Laten bevestigen door de boekhouder (`docs/FACTUUR.md`).
+
+**Te beantwoorden:** altijd een factuur, ook voor consumenten; nummerformaat;
+aparte reeks voor creditnota's; PDF opslaan of regenereren; kan de gekozen
+PDF-bibliotheek getagde, deterministische PDF's maken (meten).
+
+---
+
+## D-22 · Voorraad, reservering en geldigheid van de snapshot
+
+- **Status:** BLOCKED
+- **Depends on:** D-01
+
+Bij dropship ligt de voorraad bij de leverancier en is lokaal reserveren
+beperkt zinvol.
+
+**Te beantwoorden:** wordt voorraad gereserveerd bij het afrekenen; mag er
+besteld worden bij onbekende voorraad; hoe lang is een bevroren snapshot
+betaalbaar.
+
+---
+
+## D-23 · Klantaccounts
+
+- **Status:** OPEN
+- **Depends on:** —
+
+Afrekenen zonder account is het uitgangspunt (`docs/SCHERMEN.md`). Een account
+voegt wachtwoorden, sessies en herstel voor klanten toe.
+
+**Te beantwoorden:** komen er klantaccounts; zo ja, met welke authenticatie.
+
+---
+
+## D-24 · Bewaartermijnen
+
+- **Status:** OPEN
+- **Depends on:** —
+
+**Te beantwoorden:** prijsgeschiedenis (minimaal de referentieperiode plus
+marge, of langer als bewijs); auditlog; provider-events; applicatielogs; IP-
+adressen in logs.
+
+---
+
+## D-25 · Bedrijfsstaat alleen in een database met transacties
+
+- **Status:** DECIDED
+- **Depends on:** —
+- **Decided:** 2026-10-01
+
+Bestellingen, betalingen, terugbetalingen, factuurnummers, sessies,
+reserveringen, idempotentiesleutels en audit staan in een database met
+transacties — nooit op het filesystem (`.claude/rules/database.md`).
+
+**Waarom dit en niet het alternatief.** De eerdere tekst stelde "begin met
+JSON-bestanden, stap over bij de eerste teller". Verworpen op instructie van de
+eigenaar: een deploy die naar een nieuwe map kopieert, een tweede proces of
+een crash halverwege een schrijfactie kan bedrijfsstaat stil breken, en de
+overstap later is een migratie van live data. De database zelf kiezen blijft
+D-06.
+
+---
+
+## D-26 · Geautomatiseerd testen is de norm
+
+- **Status:** DECIDED
+- **Depends on:** —
+- **Decided:** 2026-10-01
+
+Bedrijfskritieke logica heeft unit-, integratie-, security- en E2E-tests
+(`docs/TESTEN.md`). Handmatige controle vult aan.
+
+**Waarom dit en niet het alternatief.** De eerdere tekst koos "geen
+testrunner, controlescripts en echte doorlopen". Verworpen op instructie van de
+eigenaar: geld, state machines, idempotentie en autorisatie zijn precies de
+fouten die je met kijken niet vindt. De controlescripts blijven, als
+aanvulling. Welke tools: D-17.
+
+---
+
+## D-27 · Volgorde bij geldbewegingen: intent eerst
+
+- **Status:** DECIDED
+- **Depends on:** —
+- **Decided:** 2026-10-01
+
+Een order (`PENDING_PAYMENT`) of terugbetaling (`REQUESTED`) wordt met een
+idempotentiesleutel vastgelegd vóór de call naar de provider; de uitkomst
+wordt pas geschreven na bevestiging van de provider; reconciliatie herstelt
+afwijkingen (`docs/PAYMENTS.md`).
+
+**Waarom dit en niet het alternatief.** De eerdere regel "betaaldienst eerst,
+database daarna" voorkwam terecht een terugbetaling die als geslaagd in de
+boeken staat zonder geld, maar liet bij een crash ná de provider-call geen
+spoor achter, en paste niet op betalingen (een betaling zonder bestaande order).
+Intent-first behoudt de bedoeling — nooit "geslaagd" vóór de provider het
+bevestigt — en voegt het spoor toe. Opgelost als logisch gevolg van de
+bestaande regels en de instructie van de eigenaar.
+
+---
+
+## D-28 · Technisch toegankelijkheidsdoel: WCAG 2.2 AA
+
+- **Status:** DECIDED
+- **Depends on:** —
+- **Decided:** 2026-10-01
+
+WCAG 2.2 niveau AA is het technische doel voor winkel, beheer, mail en PDF
+(`docs/ACCESSIBILITY.md`), los van de juridische vraag (D-20).
+
+**Waarom dit en niet het alternatief.** Een lager doel (A, of alleen "best
+effort") laat juist de checkout-problemen staan die klanten kosten; een hoger
+(AAA) is voor een winkel niet haalbaar over de hele linie. Instructie van de
+eigenaar.
+
+---
+
+## Beslislog
+
+| Datum | Beslissing | Wijziging |
 |---|---|---|
-| | | |
+| 2026-10-01 | D-00 – D-24 | Herschreven naar statusformaat met afhankelijkheden; D-14 – D-24 toegevoegd bij de herziening van de template |
+| 2026-10-01 | D-25 – D-28 | Vastgelegd op instructie van de eigenaar (herziening template) |

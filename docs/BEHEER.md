@@ -30,9 +30,13 @@ een deur naar werk dat openstaat.
 | Tegel | Waarom het werk is |
 |---|---|
 | Bestellingen die nog ingekocht moeten worden | dit is de dagelijkse taak |
+| **Vraagt aandacht**: order on hold, betaald na verloop, bedrag wijkt af, terugbetaling of inkooporder `UNKNOWN`/`FAILED`/`REJECTED`, mail die niet weg kan | hier is iets mis dat een mens moet beslissen (`docs/PAYMENTS.md`) |
 | Omzet deze maand | de enige die puur informatief mag zijn |
 | Openstaande retouren | hier wacht een klant op geld |
 | Beoordelingen die aandacht vragen | een lage score hoort beantwoord |
+
+De tegel "vraagt aandacht" is leeg in een gezonde winkel. Staat er iets in, dan
+staat er per regel wat er moet gebeuren.
 
 Zet bij een bedrag dat later nog verandert erbij **wat het is**: "omzet, vóór
 retouren" is een ander getal dan "omzet". Een tegel die stilletijd iets anders
@@ -70,9 +74,13 @@ iets op te zoeken.
   waarschuwing bij: dat worden twee inkooporders.
 - Het afleveradres in één blok, zo over te nemen.
 - Bedragen zoals ze op de factuur staan: subtotaal, korting, verzending, btw.
-- **Een knop "ingekocht" met een datum.** Zonder dat weet niemand na een week
-  nog welke bestelling al gedaan is — en dat is precies de fout die een klant
-  laat wachten.
+- **Per inkooporder een knop "geplaatst"** met het nummer bij de leverancier
+  en de werkelijke inkoopprijs (`docs/STATE_MACHINES.md` § Supplier order).
+  Zonder dat weet niemand na een week nog welke bestelling al gedaan is — en
+  dat is precies de fout die een klant laat wachten. Wijkt de inkoopprijs af
+  van de snapshot, dan zegt het scherm dat.
+- De aanbieding (verkoper) waarmee gerekend is, zodat er bij dezelfde wordt
+  ingekocht.
 - De betaalstatus, met het kenmerk van de betaaldienst erbij voor als er iets
   nagezocht moet worden.
 
@@ -80,11 +88,10 @@ iets op te zoeken.
 
 ## Facturen
 
-- Opeenvolgend genummerd, zonder gaten. Zie `docs/DATAMODEL.md`.
+- Nummering, inhoud en creditnota's: `docs/FACTUUR.md`.
 - Te downloaden als PDF, en terug te vinden op nummer.
-- Een overzicht per maand met de btw apart: dat is wat de boekhouder vraagt.
-- **Een creditfactuur bij een terugbetaling**, met een eigen nummerreeks. Een
-  terugboeking zonder creditfactuur klopt niet in de boeken.
+- Een overzicht per maand met de btw per tarief: dat is wat de boekhouder
+  vraagt.
 
 ---
 
@@ -132,10 +139,12 @@ ander bedrag betalen dan hij zag.
 - Drie knoppen in volgorde: **ontvangen** → **terugbetalen** → of **afwijzen
   met reden**.
 - **Terugbetalen is de enige knop in het hele paneel die geld verplaatst.** Dus
-  met een bevestiging én het bedrag erbij, en het bedrag komt uit de database —
-  nooit uit het formulier.
+  met een bevestiging met het exacte bedrag, en het bedrag wordt server-side
+  berekend — nooit overgenomen uit het formulier.
 - Wat er in de administratie komt is wat de betaaldienst zegt te hebben
   teruggeboekt. Verschilt dat van wat er gevraagd was, dan zegt het scherm dat.
+  Staat een terugbetaling op `UNKNOWN`, dan toont het scherm dat en biedt het
+  "status opvragen" — geen tweede "terugbetalen"-knop.
 - Afwijzen vraagt een reden, en die reden wordt vastgelegd.
 
 ---
@@ -170,8 +179,10 @@ Dit is bewust anders dan de winkel. De winkel verleidt, het paneel werkt.
 - **Cijfers in kolommen** die uitlijnen (`tabular-nums`). Bedragen rechts.
 - **Status als chip met een woord**, niet alleen een kleur.
 - **Gevaarlijke knoppen zien er anders uit** en staan niet naast een knop die
-  je vaak gebruikt. Terugbetalen, verwijderen en afwijzen vragen een
-  bevestiging waarin staat wát er gaat gebeuren — en bij geld: hoeveel.
+  je vaak gebruikt. Terugbetalen, annuleren, verwijderen en afwijzen vragen
+  een bevestiging waarin staat wát er gaat gebeuren, op welk object — en bij
+  geld: hoeveel. De volledige eisen (recht, reden, audit, idempotentie):
+  `.claude/rules/beveiliging.md` § Destructieve en financiële handelingen.
 - **Geen merkaccent voor statussen.** Het accent is van de winkel; een
   statuskleur die eruitziet als een knop is verwarrend.
 - **Eén taal.** Een paneel voor één persoon hoeft niet tweetalig te zijn.

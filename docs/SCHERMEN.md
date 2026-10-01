@@ -119,7 +119,11 @@ omlijnd vlak. Niet verspreid over de pagina.
 - **De knop zegt wat er gebeurt**: "Bestellen en betalen".
 - Vóór die knop: bedenktijd, voorwaarden en het totaalbedrag nog één keer.
 - Tijdens het verzenden is de knop uitgeschakeld en zegt hij dat hij bezig is.
-  Dubbel klikken mag nooit twee bestellingen opleveren.
+  Dubbel klikken mag nooit twee bestellingen opleveren — afgedwongen op de
+  server met de `checkoutAttemptId` (`docs/IDEMPOTENCY.md`), niet alleen met de
+  knop.
+- Is de prijs sinds de winkelwagen veranderd, dan ziet de klant het nieuwe
+  bedrag **vóór** de betaling, met uitleg.
 
 ## Bevestiging en status
 
@@ -128,7 +132,10 @@ omlijnd vlak. Niet verspreid over de pagina.
 - Het ordernummer, het bedrag, en wat er nu gebeurt.
 - Een link waarmee de klant de status later terugvindt — met een token erin,
   niet alleen het ordernummer.
-- De mail is de echte bevestiging. Deze pagina is het bewijs dat het gelukt is.
+- De status komt van de server, niet uit de URL. Is de betaling nog niet
+  bevestigd, dan zegt de pagina dat eerlijk ("we wachten op de bevestiging van
+  je betaling") en ververst — zie `docs/PAYMENTS.md` § De terugkeerpagina.
+- De mail is de echte bevestiging.
 - Mislukte of afgebroken betaling: zeg wat er misging en bied één weg terug.
   Geen doodlopend scherm.
 
@@ -157,9 +164,13 @@ vergeten. Bouw ze alle vier of het scherm is niet af.
    is geen melding maar een schouderophalen.
 4. **Gevuld** — het normale geval.
 
+Een scherm met een handeling (toevoegen, bestellen, retour aanmelden) heeft
+daarnaast een **succestoestand**: zeg wat er gebeurd is en wat nu.
+
 **Valt de leverancier uit, dan blijft de winkel staan.** Een categorie die
 niets teruggeeft toont een lege staat; hij veroorzaakt geen foutpagina. Fouten
-die geld raken zijn de uitzondering: die moeten juist luid zijn.
+die geld raken zijn de uitzondering: die moeten juist luid zijn. Het gedrag per
+soort storing staat in `docs/SUPPLIER_RESILIENCE.md`.
 
 ---
 

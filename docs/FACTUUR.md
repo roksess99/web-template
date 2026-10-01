@@ -1,12 +1,21 @@
 # De factuur-PDF
 
-Een factuur is geen opgemaakte bestelbevestiging. Het is een boekstuk met
-wettelijke eisen, en het is het enige document uit de winkel dat jaren later
-nog klopt moet zijn.
+Een factuur is geen opgemaakte bestelbevestiging. Het is een boekstuk, en het
+is het enige document uit de winkel dat jaren later nog moet kloppen.
+
+Dit bestand onderscheidt drie soorten regels. Laat de `WETTELIJK`-regels door
+de boekhouder of een adviseur bevestigen voor de markt van de winkel; het
+`BELEID` legt de eigenaar vast in D-21.
+
+| Soort | Wat |
+|---|---|
+| `WETTELIJK` | Verplichte factuurvermeldingen, uniek en opeenvolgend nummer, bewaarplicht |
+| `BELEID` (boekhouding) | Altijd een factuur ook voor consumenten, nummerformaat, aparte reeks voor creditnota's, "zonder gaten" als controle-eis |
+| Implementatie | Teller in de database, deterministische PDF, opslaan of regenereren, toegang met token |
 
 ---
 
-## Wat er wettelijk op moet (NL, art. 35a Wet OB)
+## Wat er op moet (`WETTELIJK`, NL, art. 35a Wet OB — te bevestigen)
 
 | Veld | Opmerking |
 |---|---|
@@ -24,27 +33,27 @@ nog klopt moet zijn.
 Het KvK-nummer is niet verplicht op de factuur maar wel gebruikelijk, en het
 staat toch al op de site.
 
-**Verkoop je aan consumenten, dan hoef je niet per bestelling een factuur uit
-te reiken** — maar je moet de verkoop wel vastleggen, en een klant die erom
-vraagt krijgt er een. In de praktijk is het eenvoudiger om er altijd een te
-maken: dan is de administratie compleet en hoef je nooit achteraf iets te
-reconstrueren.
+**Aan consumenten** geldt in NL doorgaans geen plicht om per verkoop een
+factuur uit te reiken (`WETTELIJK`, te bevestigen) — de verkoop moet wel in de
+administratie staan. **`BELEID`-voorstel (D-21):** altijd een factuur maken;
+dan is de administratie compleet en hoef je nooit iets te reconstrueren.
 
 ---
 
 ## Nummering
 
-- **Eén doorlopende reeks**, uit een teller in de database, in dezelfde
-  transactie als de factuur zelf. Zie `docs/DATAMODEL.md`.
-- Kies een vorm en leg hem vast: `2026-0001` (per jaar opnieuw) of doorlopend.
-  Per jaar opnieuw is gangbaar en leest prettiger; dan is "zonder gaten" een
-  eis per reeks.
+| Soort | Regel |
+|---|---|
+| `WETTELIJK` | Een uniek nummer, opeenvolgend, op basis van één of meer reeksen (art. 35a Wet OB) |
+| `BELEID` | Geen gaten in een reeks: een gat is een vraag van de boekhouder of controleur, dus voorkomen. Nummerformaat (`2026-0001` per jaar, of doorlopend) en een eigen reeks voor creditnota's (`C2026-0001`) — vastleggen in D-21 |
+| Implementatie | Teller in de database, in dezelfde transactie als de factuur (`.claude/rules/database.md`) |
+
 - **Een nummer dat is uitgedeeld blijft uitgedeeld.** Gaat een bestelling niet
-  door, dan vervalt het nummer niet — dan maak je een creditfactuur. Een gat in
-  de reeks is een vraag van de boekhouder.
-- Een creditfactuur krijgt een **eigen reeks** (`C2026-0001`) en verwijst naar
-  het nummer van de oorspronkelijke factuur. Een terugboeking zonder
-  creditfactuur klopt niet in de boeken.
+  door na facturering, dan een creditnota — niet het nummer hergebruiken.
+- Een creditnota verwijst naar het nummer van de oorspronkelijke factuur. Een
+  terugbetaling zonder creditnota klopt niet in de boeken.
+- Een factuur wordt gemaakt bij de transitie naar `PAID`
+  (`docs/STATE_MACHINES.md`), via de outbox, één per order (unieke sleutel).
 
 ---
 
@@ -54,10 +63,14 @@ reconstrueren.
 
 > **Bereken je de btw per regel, of over het totaal per tarief?**
 
-Die twee geven verschillende uitkomsten door afronding. Kies er één, zet hem in
-het commentaar, en gebruik overal dezelfde — ook in het besteloverzicht op de
-site en in de bevestigingsmail. Een factuur die één cent afwijkt van de
-bevestiging levert vragen op die je niet wilt beantwoorden.
+Die twee geven verschillende uitkomsten door afronding. De keuze is D-15;
+gebruik daarna overal dezelfde functie — besteloverzicht, mail en factuur. Een
+factuur die één cent afwijkt van de bevestiging levert vragen op die je niet
+wilt beantwoorden.
+
+**Kortingscodes** staan per regel verdeeld (`docs/PRIJZEN.md` § Verdelen over
+de regels), zodat de vergoeding per btw-tarief klopt. **Verzendkosten** krijgen
+btw volgens D-15.
 
 **Groepeer per btw-tarief.** Zelfs als je nu één tarief hebt: bouw het alsof er
 twee kunnen zijn. Een assortiment dat uitbreidt met iets van 9% breekt anders
@@ -127,10 +140,17 @@ ontbreekt.
 ### Determinisme
 
 Dezelfde bestelling moet dezelfde PDF opleveren. Zet er dus **geen tijdstip van
-genereren in** en geen willekeurig id. Dan kun je hem altijd opnieuw maken en
-hoef je hem niet per se te bewaren.
+genereren in** en geen willekeurig id; zet ook de metadata (aanmaakdatum,
+document-id) vast waar de bibliotheek dat toelaat. Leg vast met een test die
+twee keer genereert en de bytes vergelijkt — `AANNAME` dat de bibliotheek dat
+haalt, tot gemeten.
 
-### Bewaren of opnieuw maken?
+### Toegankelijk
+
+Een getagde PDF met leesvolgorde, koppen, tabelkoppen, taal en titel. Details
+in `docs/ACCESSIBILITY.md` § Facturen en PDF's.
+
+### Bewaren of opnieuw maken? (D-21)
 
 Twee geldige keuzes — leg vast welke:
 
@@ -140,8 +160,11 @@ Twee geldige keuzes — leg vast welke:
 - **Opslaan als bestand.** Zekerder, en nodig zodra je het sjabloon vrij wilt
   kunnen wijzigen. Kost opslag en een plek waar die bestanden veilig staan.
 
-De fiscale bewaartermijn in Nederland is zeven jaar — voor de factuur, of voor
-de gegevens waaruit hij exact te reconstrueren is.
+De fiscale bewaartermijn in Nederland is zeven jaar (`WETTELIJK`: art. 52 AWR,
+te bevestigen) — voor de factuur, of voor de gegevens waaruit hij exact te
+reconstrueren is. Een opgeslagen PDF is bedrijfsdata en hoort in de backup
+(`docs/DISASTER_RECOVERY.md`); een geregenereerde niet, maar dan moeten
+sjabloon én bevroren gegevens die zeven jaar meegaan.
 
 ### Toegang
 
@@ -165,7 +188,7 @@ Naast de losse facturen heeft de eigenaar één scherm nodig: **per maand de
 omzet per btw-tarief, het btw-bedrag, en het aantal facturen.** Dat is wat de
 aangifte vraagt.
 
-Let op dat retouren daarin meetellen als negatieve post via de creditfacturen,
+Let op dat retouren daarin meetellen als negatieve post via de creditnota's,
 en niet door de oorspronkelijke factuur aan te passen. **Een uitgereikte
 factuur verander je nooit meer.**
 
@@ -180,4 +203,6 @@ factuur verander je nooit meer.**
 - [ ] Meer regels dan één pagina: koppen herhaald, totalen op de laatste
 - [ ] "Betaald via … op …" staat erop
 - [ ] De link is niet te raden
-- [ ] Een creditfactuur verwijst naar het origineel
+- [ ] Een creditnota verwijst naar het origineel
+- [ ] Twee keer genereren geeft dezelfde bytes
+- [ ] De PDF is getagd en leest goed met een schermlezer

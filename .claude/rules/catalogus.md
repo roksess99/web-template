@@ -1,126 +1,115 @@
 ---
 paths:
   - "src/lib/catalog/**"
-  - "src/lib/*provider*"
+  - "tests/fixtures/catalog/**"
 ---
 
-# Catalogus — regels voor de koppeling met de leverancier
+# Catalogus — de koppeling met de leverancier
 
-Laadt bij werk aan de adapter. Dit is de laag tussen een API die je niet in de
-hand hebt en een winkel die altijd moet werken.
+Laadt bij werk aan de adapter: de laag tussen een API die je niet in de hand
+hebt en een winkel die altijd moet werken. Faalgedrag, timeouts en fixtures:
+`docs/SUPPLIER_RESILIENCE.md`. Het meetformulier: `docs/api/LEVERANCIER.md`.
 
-## Het contract gaat voor
+## De keten
 
-**`types.ts` is leidend.** Past de echte API er niet op, dan past de **adapter**
-zich aan — nooit de componenten. Een veld dat de leverancier anders noemt is
-een vertaling in de adapter, geen nieuw veld in de UI.
+```text
+leverancier-API
+  ↓  HTTP-client (timeout, retry, rate limit, circuit breaker)
+adapter          → supplier DTO's (alleen hier)
+  ↓  schemavalidatie
+mapping          → canoniek Product (src/lib/catalog/types.ts)
+  ↓
+applicatie       pricing, cart, checkout, orders, UI
+```
 
-Componenten importeren alleen uit `types.ts`. Niet uit de adapter, niet uit de
-schema's van de API. Zo kun je er een tweede leverancier naast zetten zonder
-één component aan te raken.
+## De grens is hard
 
-**Verzin geen velden onderweg.** Ontbreekt er iets, dan verandert `types.ts` —
-en dan zie je meteen wat er allemaal op vastzit.
+**Supplier DTO's verlaten de adapter niet.** Leverancierspecifieke types,
+veldnamen, statuscodes of id-formaten komen niet in:
+
+- UI en componenten
+- winkelwagen, checkout, bestellingen
+- pricing, discounts, invoices
+- de database (behalve als ondoorzichtige `supplierRef`-string en een
+  `supplierOfferId` in de bevroren bestelregel)
+
+Componenten en domeinlogica importeren alleen uit `src/lib/catalog/types.ts`.
+Afdwingen met een importregel in de linter (`docs/CI_CD.md`), niet alleen met
+deze tekst.
+
+**`types.ts` is leidend.** Past de echte API er niet op, dan past de adapter
+zich aan — nooit de componenten. Ontbreekt er een veld, dan verandert
+`types.ts`, en zie je meteen wat er op vastzit. Verzin geen velden onderweg.
 
 ## Server-side, altijd
 
-De browser praat nooit rechtstreeks met de leverancier. Het token is een
-secret, en de rate limit geldt voor de héle winkel: één bezoeker die
-rechtstreeks mag bevragen kan de winkel voor iedereen stilleggen.
+De browser praat nooit met de leverancier: het token is een secret en de rate
+limit geldt voor de hele winkel. Bovenin de adapter een controle die gooit als
+hij in een browser draait.
 
-Zet een controle bovenin de adapter die gooit als hij toch in een browser
-draait. Dat vangt de fout bij het bouwen in plaats van in productie.
+## Schema aan de rand
 
-## Alles door een schema aan de rand
-
-Elk antwoord van de leverancier gaat door een schemavalidatie voordat het de
-code in gaat. Daarbinnen is alles getypeerd en hoef je nergens meer te
-controleren of een veld bestaat.
-
-Let op numerieke velden die als **string** terugkomen — dat is bij
-leveranciers-API's eerder regel dan uitzondering. Dwing ze af bij de rand, niet
-met een `Number()` halverwege een berekening.
-
-Een artikel dat niet door het schema komt wordt **overgeslagen**, niet
-gerepareerd. Eén kapot artikel mag geen categoriepagina slopen.
+- Elk antwoord door een schemavalidatie voordat het de code in gaat.
+- Numerieke velden die als **string** komen: afdwingen in het schema, niet met
+  `Number()` halverwege een berekening. Prijzen gaan via een exacte
+  decimaal-naar-centen-conversie, nooit via `parseFloat * 100`.
+- **Een artikel dat niet door het schema komt wordt overgeslagen** met een
+  logregel en een teller; één kapot artikel sloopt geen categoriepagina. In het
+  **geldpad** (checkout, inkoop) is een ongeldig artikel juist een harde fout.
+- Een HTTP 200 met een foutcode in de body is een fout. Meet welk van de twee
+  de leverancier doet.
 
 ## Zonder sleutel blijft de winkel staan
 
-Is er geen token, dan valt de provider terug op een mock met verzonnen data.
-Dat is geen speelgoed maar een eis: anders kan niemand aan de UI werken zonder
-verbruik bij de leverancier, en valt de hele site om zodra een sleutel verloopt.
+Geen token → de provider gebruikt de mock. Dat is een eis: anders kan niemand
+aan de UI werken zonder verbruik bij de leverancier.
 
-De mock levert dezelfde vorm als het echte ding, inclusief de rare gevallen:
-een artikel zonder foto, een artikel zonder voorraad, een lange naam.
+De mock is **deterministisch** (geen `Math.random`, geen `Date.now` in data),
+**schema-valide** (gaat door dezelfde validatie als echte data), en levert de
+fixtures uit `docs/SUPPLIER_RESILIENCE.md`, inclusief de faalscenario's — te
+kiezen per test of via een omgevingsvariabele in ontwikkeling.
 
 ## Caching
-
-Drie soorten, met elk een eigen duur:
 
 | Soort | Duur | Waarom |
 |---|---|---|
 | Structuur (categorieën, merken) | uren tot een dag | verandert nauwelijks |
-| Prijzen en voorraad | minuten | moet actueel zijn, maar niet per klik |
-| Tellingen en aggregaten | een dag | duur om op te halen, zelden anders |
+| Prijzen en voorraad voor weergave | minuten | actueel, maar niet per klik |
+| Tellingen en aggregaten | een dag | duur om op te halen |
+| Prijs en voorraad **in de checkout** | **niet gecachet** | het geldpad haalt vers op |
 
-**Meet de omvang van je antwoorden.** Boven een paar megabyte weigeren sommige
-caches stilletjes, en dan haal je bij elke klik opnieuw alles op zonder dat
-iets daarover klaagt. Is dat zo: een eigen cache van een paar minuten in het
-geheugen ernaast.
-
-**Een cache mag nooit iets laten doorlopen dat is afgelopen.** Een actie die op
-zijn einddatum stopt komt langs niemand die de cache kan wissen. Maak de
-cachesleutel dus afhankelijk van wat er geldig is, niet alleen van de tijd.
+- **Meet de omvang van antwoorden.** Boven een paar megabyte weigeren sommige
+  framework-caches stil (`EERDER WAARGENOMEN`: 4 MB, elke filterklik opnieuw
+  opgehaald). Dan een eigen cache in het geheugen ernaast.
+- **Een cache mag nooit iets laten doorlopen dat is afgelopen.** Maak de
+  sleutel afhankelijk van wat geldig is (actieve acties), niet alleen van tijd.
+- Verouderde data tonen tijdens een storing mag, binnen de grenzen van het
+  stale-beleid in `docs/SUPPLIER_RESILIENCE.md` — nooit in de checkout.
 
 ## Rate limit
 
-De limiet geldt voor de hele winkel, dus voor alle bezoekers tegelijk. Dat
-betekent:
-
-- Verzoeken bundelen waar het kan, en anders begrenzen hoeveel er tegelijk
-  lopen.
+- De limiet geldt voor alle bezoekers samen: bundelen, gelijktijdigheid
+  begrenzen, en een lijst die iedereen nodig heeft één keer ophalen.
 - Tel één keer hoeveel calls een paginaweergave kost. Die meting vindt altijd
-  iets — meestal een lijst die drie keer wordt opgehaald omdat drie componenten
-  hem los nodig hebben.
-- Een lijst die elke bezoeker nodig heeft hoort één keer opgehaald en
-  doorgegeven te worden, niet per component.
-
-## Fouten
-
-**Een kapot onderdeel van de leverancier mag geen foutpagina opleveren.** Een
-categorie die een serverfout geeft wordt een lege staat, met een logregel.
-
-Maar: **vang niet alles af.** Een fout in het pad dat geld raakt — een prijs die
-niet uit te rekenen is, een artikel dat tijdens het afrekenen verdwijnt — moet
-luid zijn en de handeling tegenhouden. Het verschil is of de klant er geld aan
-kwijt is.
-
-Controleer of de API fouten in de **status** zet of in een foutcode binnen een
-antwoord met status 200. Dat laatste komt vaak voor; dan is een geslaagde
-HTTP-aanroep nog geen geslaagd verzoek.
+  iets.
 
 ## Prijs en voorraad
 
-Zie `.claude/rules/geld.md`. De regel die hier thuishoort: **kies één
-aanbieding en neem alles daarvandaan** — prijs, voorraad, levertijd. Mengen van
-twee verkopers levert een winkel op die iets belooft wat niet te koop is.
+Zie `.claude/rules/geld.md`: **kies één aanbieding en neem alles daarvandaan**,
+en geef het id van die aanbieding door aan het canonieke `Product`.
 
 ## Identiteit van een artikel
 
-- Het id van de leverancier is de sleutel, ook in de winkelwagen en in de
-  bestelling.
-- De URL is een leesbare slug mét dat id erin, zodat hij terug te vertalen is.
-- Verandert een slug, laat de oude dan omleiden met een 308.
-- **Leg geen id's van categorieën vast in code** zonder te hebben gemeten dat
-  ze stabiel zijn over de tijd. Zoek op naam op in de boom die je toch al
-  ophaalt.
+- Het id van de leverancier is de sleutel, in winkelwagen en bestelling — met
+  de bron erbij als er meer dan één catalogus is.
+- De URL is een leesbare slug mét dat id; een gewijzigde slug leidt om met 308.
+- **Leg geen categorie-id's vast in code** zonder gemeten te hebben dat ze
+  stabiel zijn (`EERDER WAARGENOMEN`: id's die na een maand naar de groep
+  ernaast wezen). Zoek op naam in de boom die je toch ophaalt.
 
-## Twee catalogi naast elkaar
-
-Komt er een tweede bron bij (een andere API, een andere productgroep), dan:
+## Twee catalogi
 
 - Elke productgroep weet bij welke bron hij hoort; dat gaat mee in de
-  winkelwagen, want anders weet je bij het afrekenen niet waar je het artikel
-  moet opzoeken.
-- Eén bestelling kan twee inkooporders worden. Zorg dat de beheerder dat ziet.
-- Het contract blijft één type. Twee bronnen, één `Product`.
+  winkelwagen.
+- Eén bestelling kan meerdere inkooporders worden; de beheerder ziet dat.
+- Twee bronnen, één `Product`.

@@ -5,21 +5,32 @@ legt de volgorde vast en de grenzen waar ze elkaar raken. Zonder die volgorde
 krijg je een winkel die soms met verlies verkoopt en die niet kan uitleggen hoe
 een bedrag tot stand kwam.
 
-Het rekenwerk zelf staat in `.claude/rules/geld.md`. Dit gaat over de regels.
+Het rekenwerk zelf (geldmodel, afronding, volgorde) staat in
+`.claude/rules/geld.md`. Dit gaat over de regels.
 
 ---
 
+## Vier begrippen
+
+`supplierCost` (inkoop van de gekozen aanbieding), `landedCost` (wat een stuk
+de winkel werkelijk kost), `sellingPrice` (wat de klant betaalt) en `margin`
+(verkoop excl. btw − landedCost). Definities in `.claude/rules/geld.md`. **Wat
+er in `landedCost` zit is D-16**; tot die beslissing is `landedCost =
+supplierCost` een benoemde aanname, en dan is de ondergrens hieronder te laag
+als er nog kosten bovenop komen.
+
 ## De prijsopbouw, in volgorde
 
-```
-  inkoopprijs van de leverancier        (excl. btw)
-+ prijsregel: opslag van de eigenaar     ← of: adviesprijs van de leverancier
+```text
+  supplierCost van de gekozen aanbieding   (meestal excl. btw — meten, LEVERANCIER §6)
++ prijsregel: opslag van de eigenaar       ← of: adviesprijs van de leverancier
 + btw
-= de prijs die op de pagina staat        ← dit is de "van"-prijs bij een actie
-− kortingsactie                          ← begrensd door de ondergrens
+= de prijs die op de pagina staat          ← basis voor de prijsgeschiedenis
+− kortingsactie                            ← begrensd door de ondergrens
 = de prijs die de klant ziet
-− kortingscode                           ← over het totaal, niet per artikel
-= wat er betaald wordt
+− kortingscode                             ← over de bestelling, verdeeld over de regels
++ verzendkosten                            ← btw volgens D-15
+= wat er betaald wordt                     ← bevroren in de order-snapshot
 ```
 
 **Elke stap heeft één bron en één moment.** Een korting die ergens anders wordt
@@ -41,8 +52,9 @@ De eigenaar bepaalt zijn marge, per groep. Drie dingen liggen vast:
 - **Geen van beide** betekent: inkoop plus een minimummarge uit de instellingen.
   Dat is een noodgreep, geen strategie.
 
-Eén grens geldt altijd: **nooit onder de inkoopprijs verkopen**, ook niet als
-er 0 of onzin is ingevuld.
+Eén grens geldt altijd: **nooit onder de ondergrens verkopen** — de kostprijs
+(`landedCost`, D-16) plus btw — ook niet als er 0 of onzin is ingevuld. Een
+opslag buiten het geldige bereik (bijv. negatief of > 1000%) wordt geweigerd.
 
 ---
 
@@ -59,16 +71,24 @@ Dit is de belangrijkste regel van dit document.
 > Het wordt 9%.**
 
 Want de korting mag de marge opeten en niet meer dan dat. Met een opslag van
-10% is de ondergrens de inkoopprijs, en daar zit maar 9,1% tussen:
+10% is de ondergrens de kostprijs, en daar zit maar 9,1% tussen:
 
+```text
+kostprijs (hier = supplierCost)   € 10,00 excl. btw
++ 10% opslag                      € 11,00 excl. btw
++ 21% btw                         € 13,31   ← staat op de pagina
+ondergrens (kostprijs + btw)      € 12,10
+gevraagde korting 20%           → € 10,65   ligt onder de grens
+toegepast                       → € 12,10   = 9% korting
 ```
-inkoop                 € 10,00 excl. btw
-+ 10% opslag           € 11,00 excl. btw
-+ 21% btw              € 13,31   ← staat op de pagina
-ondergrens (inkoop + btw)  € 12,10
-gevraagde korting 20%  → € 10,65  ligt onder de grens
-toegepast              → € 12,10  = 9% korting
-```
+
+**Begrenzen of weigeren?** Een gevraagd percentage dat zelf ongeldig is (0,
+negatief, boven het maximum) wordt **geweigerd**. Een geldig percentage dat
+bij één artikel op de ondergrens stuit wordt voor **dat artikel begrensd** — de
+grens hangt per artikel van de kostprijs af en is bij het aanmaken van de
+actie niet voor elk artikel te weten. Het paneel laat zien bij welke artikelen
+dat gebeurt. Dit is geen uitzondering op "weigeren, niet afkappen"
+(`.claude/rules/geld.md`): dat gaat over ongeldige invoer.
 
 De maximale korting die een opslag toelaat is `opslag / (100 + opslag)`:
 
@@ -87,8 +107,8 @@ inkoopprijs ligt. Die ruimte is meestal groter, en per artikel anders.
 
 ### Wat daaruit volgt voor de code en het scherm
 
-- **Reken de korting uit waar de inkoopprijs nog in beeld is** — in de laag die
-  de prijs opbouwt, niet ergens achteraf. Buiten die laag is de inkoopprijs weg
+- **Reken de korting uit waar de kostprijs nog in beeld is** — in de laag die
+  de prijs opbouwt, niet ergens achteraf. Buiten die laag is de kostprijs weg
   en kun je de grens niet meer bewaken.
 - **Geef terug wat er werkelijk is toegepast**, niet wat er gevraagd was.
 - **Het beheerpaneel zegt het als de grens ingreep.** Anders staat er 20% in
@@ -113,18 +133,22 @@ jaar niet meer te verklaren waarom een oude bestelling die prijs had.
 
 ### De "van"-prijs
 
-Een doorgestreepte prijs mag alleen met de **laagste prijs van de afgelopen 30
-dagen** als referentie (EU-prijsaanduidingsrichtlijn). Dat betekent:
+| Soort | Inhoud |
+|---|---|
+| `WETTELIJK` | Bij een aangekondigde prijsverlaging is de referentieprijs de laagste prijs die de handelaar in een periode van ten minste 30 dagen vóór de verlaging heeft toegepast. Bron: Richtlijn 98/6/EG art. 6 bis, ingevoegd door Richtlijn (EU) 2019/2161; in NL omgezet in het Besluit prijsaanduiding producten. Lidstaten kennen uitzonderingen (bijv. geleidelijke verlagingen, bederfelijke waar). **Laten bevestigen voor de markt van de winkel.** |
+| `BELEID` | Geen doorgestreepte prijs zonder volledige geschiedenis over de hele referentieperiode; de uitleg ("laagste prijs van de afgelopen 30 dagen") staat erbij |
+| Implementatie | `PriceHistory` (`docs/DATAMODEL.md`) met onze verkoopprijs, tijdstip, bron en markt; de referentieprijs wordt berekend over de periode vóór de start van de actie, niet vóór vandaag |
 
-- Je moet prijzen **meten en bewaren voordat een actie begint**. Een
-  geschiedenis die je vandaag niet opbouwt heb je over dertig dagen nog steeds
-  niet.
-- Meet ook artikelen van acties die **binnenkort beginnen**, niet alleen de
-  lopende.
-- Is er geen geschiedenis, dan staat er alleen het percentage en geen
-  doorgestreepte prijs. Dat is geen tussenoplossing maar de wet.
-- Zet erbij wát dat bedrag is ("laagste prijs van de afgelopen 30 dagen"). Een
-  doorgestreepte prijs zonder uitleg is precies wat de toezichthouder aanrekent.
+Wat daaruit volgt:
+
+- **Prijzen meten en bewaren voordat een actie begint.** Een geschiedenis die je
+  vandaag niet opbouwt heb je over dertig dagen nog steeds niet.
+- Het gaat om **onze** verkoopprijs, niet de inkoopprijs van de leverancier.
+- Meet ook artikelen van acties die **binnenkort beginnen**.
+- Is er onvoldoende geschiedenis: alleen het percentage, geen doorgestreepte
+  prijs.
+- Een prijs moet achteraf te reconstrueren zijn: welke prijs gold op dag X,
+  door welke regel. Dat is je bewijs als iemand ernaar vraagt.
 
 ---
 
@@ -163,6 +187,21 @@ klant betaalt méér door een korting te gebruiken. Vang dat af: zakt het totaal
 door de korting onder de drempel terwijl het er zonder korting boven lag, dan
 blijft de verzending gratis.
 
+### Verdelen over de regels
+
+Een code geldt over de bestelling, maar btw wordt per tarief berekend en een
+retour gaat per regel. Daarom wordt het kortingsbedrag **verdeeld over de
+regels waarop hij geldt**, voordat de btw wordt berekend:
+
+- proportioneel naar het regeltotaal;
+- de afrondingsrest deterministisch verdeeld (methode in D-15, bijv. grootste
+  rest, bij gelijkstand de eerste regel);
+- het aandeel staat in de bevroren regel (`allocatedOrderDiscountCents`).
+
+Bij een **gedeeltelijk retour** gaat het aandeel van de geretourneerde regels
+van het terugbetaalbedrag af. Zonder verdeling betaalt de winkel bij een retour
+de korting dubbel terug, of de klant krijgt te weinig.
+
 ### Opnieuw keuren bij het afrekenen
 
 De code wordt bij het afrekenen opnieuw gekeurd, met prijzen die de server zelf
@@ -182,11 +221,23 @@ databasestuurprogramma binnentrekt.
 
 ---
 
+## Nul, negatief en terugbetalen
+
+- Een totaal van **nul** kan (bijv. vervanging); de betaalstap volgt dan een
+  expliciete transitie (`docs/STATE_MACHINES.md`), geen betaling van € 0,00.
+- Een totaal onder nul bestaat niet: een code wordt begrensd tot het bedrag
+  waarop hij geldt.
+- Een terugbetaling is nooit hoger dan wat er voor die regels betaald is,
+  inclusief het verdeelde codeaandeel. Verzendkosten volgens `docs/RETOUREN.md`.
+
 ## Controlelijst
 
-- [ ] Een actie die de ondergrens raakt wordt getrimd, niet geweigerd — maar
-      het paneel zegt het
+- [ ] Een actie die de ondergrens raakt wordt per artikel begrensd — en het
+      paneel zegt het
 - [ ] Een gevraagd percentage buiten bereik wordt wél geweigerd
+- [ ] De ondergrens gebruikt de kostprijs volgens D-16
+- [ ] Een code is verdeeld over de regels; btw klopt per tarief
+- [ ] Een gedeeltelijk retour betaalt het juiste deel van de code terug
 - [ ] Twee acties op één artikel: de hoogste wint, en dat is zichtbaar
 - [ ] Geen doorgestreepte prijs zonder 30 dagen geschiedenis
 - [ ] Een code werkt niet op artikelen die al in de actie zijn

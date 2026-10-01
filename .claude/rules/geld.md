@@ -1,134 +1,154 @@
 ---
 paths:
-  - "src/lib/pricing*"
+  - "src/lib/pricing/**"
   - "src/lib/cart/**"
   - "src/lib/checkout/**"
+  - "src/lib/payments/**"
   - "src/lib/orders/**"
   - "src/lib/discounts/**"
   - "src/lib/invoices/**"
   - "src/lib/returns/**"
   - "src/app/api/**"
+  - "src/components/cart/**"
+  - "src/components/checkout/**"
 ---
 
 # Geld — regels die uit schade komen
 
-Laadt bij werk aan prijzen, winkelwagen, afrekenen, bestellingen, kortingen,
-facturen en retouren. Elke regel hieronder staat er omdat het mis is gegaan of
-op een haar na mis ging.
+Laadt bij werk aan prijzen, winkelwagen, afrekenen, betalingen, bestellingen,
+kortingen, facturen en retouren. De bedrijfsregels (prijsopbouw, acties,
+codes) staan in `docs/PRIJZEN.md`; dit bestand gaat over **hoe je rekent en
+in welke volgorde je handelt**.
+
+## Het geldmodel
+
+**Een bedrag is een integer in de kleinste eenheid, met valuta.** Nooit een
+float, nooit een kale integer die "wel euro's zal zijn":
+
+```ts
+type Money = { amount: number /* integer, minor units */; currency: string /* ISO 4217 */ };
+```
+
+- Rekenen met twee bedragen van verschillende valuta is een fout die gooit.
+- `Number.isSafeInteger` aan de rand; een niet-integer bedrag wordt geweigerd.
+- Opslag in de database als integer-kolom plus valutakolom (of één vaste valuta
+  per tabel, vastgelegd in D-14). Geen `DECIMAL` die als float terugkomt.
+
+**Benoem wat een bedrag is.** Deze vier lopen door elkaar en mogen dat niet:
+
+| Begrip | Betekenis | Bron |
+|---|---|---|
+| `supplierCost` | Inkoopprijs van de gekozen aanbieding, zoals de leverancier hem rekent (meestal excl. btw) | adapter |
+| `landedCost` | Wat één stuk de winkel werkelijk kost: inkoop plus wat het beleid erbij telt (inkomende verzending, betaalkosten, toeslagen) | D-16 |
+| `sellingPrice` | Wat de klant betaalt, incl. btw | prijsopbouw |
+| `margin` | `sellingPrice` excl. btw − `landedCost` | afgeleid |
+
+**`margin = sellingPrice − supplierCost` is géén universele waarheid.** Zolang
+D-16 open staat is `landedCost = supplierCost` een tijdelijke aanname — en zo
+staat het ook in de code, met een verwijzing naar D-16.
 
 ## Rekenen
 
-**Bedragen zijn integers in centen.** Nooit floats. `0.1 + 0.2` is in
-JavaScript niet `0.3`, en een cent verschil op een factuur is een
-boekhoudprobleem.
-
-**Reken in bruto centen als je bron bruto is.** Een bedrag inclusief btw eerst
-naar netto rekenen en er daarna weer btw bij optellen kost een cent aan
-afronding — en dan staat er € 37,99 waar de leverancier € 38,00 zegt. Haal de
-btw er pas uit bij het factureren, met een functie die dat exact doet.
-
-**Afronden doe je bewust en één keer.** Leg in het commentaar vast welke kant
-op en waarom. Een percentage dat je toont rond je naar beneden af: liever 19%
-tonen bij een korting van 19,6% dan een percentage beloven dat de klant niet
-terugziet in het bedrag.
+- **Reken bruto als je bron bruto is.** Netto → bruto → netto kost een cent.
+  Haal de btw er pas uit bij het factureren, met één exacte functie.
+- **Rond bewust en één keer af**, met de richting en de reden in commentaar.
+  Een getoond percentage rond je naar beneden af.
+- **Btw per regel of per tarief over het totaal** is een keuze (D-15). Eén
+  functie, gebruikt door pagina, winkelwagen, checkout, mail en factuur.
+- **Een orderkorting (code) wordt verdeeld over de regels** voordat er btw
+  wordt berekend: proportioneel, met een deterministische restverdeling
+  (D-15). Zonder verdeling klopt de btw per tarief niet.
+- **Verzendkosten** krijgen hun btw volgens D-15; niet "altijd het hoogste
+  tarief" als aanname.
+- **Nul is een geldig totaal** (bijvoorbeeld een volledig vergoede
+  vervanging); de betaalstap wordt dan overgeslagen via een expliciete
+  transitie, niet door een betaling van € 0,00 te proberen.
+- **Negatief is nooit een totaal.** Een korting die het totaal onder nul
+  brengt wordt begrensd door de regels in `docs/PRIJZEN.md`; komt er toch een
+  negatief totaal uit, dan gooit de berekening.
 
 ## Wat de browser mag meesturen
 
 **Een bedrag dat naar de betaaldienst gaat komt nooit uit de browser.** De
-winkelwagen leeft in localStorage en is dus door de klant aan te passen. Wat de
-browser mag meesturen is hoogstens een artikelnummer, een aantal en de tekst
-van een kortingscode. Naam, prijs en voorraad komen vers uit de catalogus,
-server-side, bij elk verzoek opnieuw.
+browser stuurt hoogstens artikel-id, aantal en de tekst van een kortingscode.
+Naam, prijs, voorraad, korting, verzendkosten en btw rekent de server opnieuw
+uit, bij elk verzoek. Het bedrag voor de betaaldienst komt uit de **bevroren
+snapshot** van de bestelling.
 
-**Reken op de server alles opnieuw uit.** Ook het subtotaal, ook de
-verzendkosten, ook de korting. Het bedrag dat naar de betaaldienst gaat komt
-uit dát document.
+## Prijs en voorraad
 
-## Prijzen en voorraad
-
-**Prijs en voorraad komen van dezelfde aanbieding.** Heeft de leverancier
-meerdere verkopers per artikel, kies er dan één — de goedkoopste **mét**
-voorraad — en neem alles daarvandaan. Een lege verkoper is geen aanbieding:
-zijn prijs tonen belooft iets dat niet te koop is.
-
-**Begrens het aantal op die voorraad.** Anders bestelt iemand er vier waar er
-één ligt, en koopt de winkel de rest duurder in dan ze verkocht is.
-
-**Een ondergrens gaat vóór het percentage.** Een korting mag de marge opeten,
-nooit meer dan dat — ook niet als de leverancier zijn inkoopprijs verhoogt
-nadat de actie is aangemaakt. Reken de korting dus uit op de plek waar de
-inkoopprijs nog in beeld is.
-
-Concreet: een actie van 20% op een artikel met 10% opslag levert **9%** korting
-op. De maximale korting die een opslag toelaat is `opslag / (100 + opslag)`.
-De volledige opbouw — prijsregel, actie, code, en hoe ze elkaar begrenzen —
-staat in `docs/PRIJZEN.md`.
-
-**Wat er terugkomt is wat er werkelijk is toegepast.** Ligt dat lager dan
-gevraagd, dan hoort het beheerpaneel dat te laten zien in plaats van te doen
-alsof het gelukt is.
+- **Prijs en voorraad komen van dezelfde aanbieding.** Meerdere verkopers: kies
+  er één — de goedkoopste **mét** voorraad — en neem prijs, voorraad en
+  levertijd daarvandaan. Leg het id van die aanbieding vast in de bestelregel;
+  anders koopt de eigenaar bij een andere verkoper in dan waarmee gerekend is.
+- **Begrens het aantal op die voorraad.**
+- **De ondergrens gaat vóór het percentage.** Reken korting uit waar de
+  kostprijs nog in beeld is. Formule en voorbeelden: `docs/PRIJZEN.md`.
+- **Geef terug wat werkelijk is toegepast**, niet wat gevraagd was.
 
 ## Buiten bereik: weigeren, niet afkappen
 
-Een bedrag of aantal buiten het toegestane bereik wordt **geweigerd met een
-melding**. Afkappen voelt veilig en is het niet. Eén keer gezien in het echte werk: een
-getypte "-5" werd door een `Math.max(1, …)` een terugboeking van één cent, die
-het retour meteen op "terugbetaald" zette — waarna de rest er niet meer
-doorheen kon.
+Een **invoerwaarde** buiten het toegestane bereik wordt geweigerd met een
+melding. Een getypte "-5" die door `Math.max(1, …)` een terugboeking van één
+cent werd, zette een retour op "terugbetaald" — waarna de rest niet meer
+doorheen kon (`EERDER WAARGENOMEN`).
 
-Zelfde regel bij een korting die te diep is, een aantal dat te hoog is, een
-datum die achterstevoren staat. Liever een melding dan een waarde die stilletjes
-iets anders wordt dan iemand bedoelde.
+Dit is iets anders dan de **ondergrens van een actie**: een geldig percentage
+(bijv. 20%) dat bij één artikel op de kostprijs stuit, wordt voor dat artikel
+begrensd en het paneel zegt dat. Ongeldige invoer: weigeren. Geldige invoer die
+per artikel een grens raakt: begrenzen en zichtbaar maken.
 
-## Volgorde bij een betaling of terugbetaling
+## Volgorde bij alles wat geld verplaatst
 
-1. **Betaaldienst eerst, database daarna.** Andersom staat een mislukte
-   terugboeking als "terugbetaald" in de administratie — en dan wacht de klant
-   op geld dat nooit komt.
-2. **Een idempotentiesleutel mee**, zodat twee tabbladen samen één boeking
-   opleveren. Gebruik daarvoor je eigen referentie, niet een willekeurig getal.
-3. **Schrijf weg wat de betaaldienst zegt**, niet wat het formulier vroeg. Met
-   een idempotentiesleutel krijgt een tweede poging met een ánder bedrag de
-   éérste boeking terug; volg het bankafschrift, niet het invoerveld.
-4. **Lukt de boeking wél en de database niet**, dan moet dat luid zijn. Het
-   kenmerk van de boeking in het logboek, en een melding op het scherm die
-   zegt dat het met de hand bijgewerkt moet worden.
+**Intent eerst, provider dan, uitkomst daarna.** Volledig uitgewerkt in
+`docs/PAYMENTS.md`; de kern:
+
+1. **Leg de intentie vast** in de database, met een idempotentiesleutel en
+   status `PENDING`/`REQUESTED`, vóór de externe call. Zo laat een crash altijd
+   een spoor achter dat reconciliatie kan oppakken.
+2. **Roep de provider aan met diezelfde idempotentiesleutel** — je eigen
+   referentie, niet een willekeurig getal per poging.
+3. **Schrijf weg wat de provider zegt**, niet wat het formulier vroeg. Met een
+   idempotentiesleutel krijgt een tweede poging met een ánder bedrag de
+   éérste boeking terug.
+4. **Markeer pas als geslaagd na bevestiging van de provider.** Een mislukte
+   terugboeking die als "terugbetaald" in de boeken staat is precies de fout
+   die dit voorkomt.
+5. **Timeout of onbekende uitkomst = status `UNKNOWN`**, niet "mislukt" en niet
+   "opnieuw proberen met een nieuwe sleutel". Reconciliatie vraagt de echte
+   stand op.
+
+## Terugbetalingen
+
+- **Vertrouw nooit het bedrag uit de browser.** Het formulier mag een bedrag
+  voorstellen; de server herberekent het maximum uit de bevroren regels en de
+  eerdere terugbetalingen, en weigert alles erboven.
+- Controleer de status van order en betaling vóór de call (`docs/STATE_MACHINES.md`).
+- Som van alle terugbetalingen ≤ betaald bedrag — afgedwongen in een transactie
+  met een vergrendelde rij, niet met een controle in code.
+- Elke terugbetaling: bevestiging met exact bedrag, reden, auditregel,
+  idempotentiesleutel = id van het terugbetaal-record.
 
 ## Gelijktijdigheid
 
-Twee verzoeken tegelijk is geen randgeval maar twee tabbladen.
+Twee verzoeken tegelijk is geen randgeval maar twee tabbladen. **Laat de
+database het uitmaken**: een unieke sleutel waar dat kan, anders een
+transactie met een vergrendelde rij. Geldt voor factuurnummers, "één keer per
+klant", "er loopt al een retour", terugbetaalsom en elke teller.
 
-**Laat de database het uitmaken, niet een controle in code.** Lezen en daarna
-schrijven laat precies genoeg ruimte voor een tweede verzoek ertussen. Gebruik
-een unieke sleutel waar dat kan ("één code per klant"), en anders een
-transactie met een vergrendelde rij.
+## Nummers en toegang
 
-Dat geldt voor: factuurnummers, volgnummers, "één keer per klant", "er loopt al
-een retour", en elke teller.
-
-## Tellers en nummers
-
-**Factuurnummers zijn opeenvolgend en zonder gaten.** Dat is een eis van de
-belastingdienst, geen voorkeur. Ze komen dus uit een teller in de database, in
-dezelfde transactie als de rij waar ze bij horen.
-
-**Een ordernummer mag raadbaar zijn, een sleutel niet.** Wil je een klant zijn
-bestelling laten terugvinden zonder account, geef hem dan een aparte token in
-de link. Het ordernummer alleen is nooit genoeg bewijs; vraag er altijd iets
-bij dat de klant weet (zijn mailadres bijvoorbeeld), en geef bij een misser
-exact dezelfde melding als bij een niet-bestaand nummer — anders vertelt het
-formulier of een nummer bestaat.
+- **Factuurnummers** uit een teller in de database, in dezelfde transactie als
+  de factuur. Wettelijke eis en beleid: `docs/FACTUUR.md`.
+- **Een ordernummer mag raadbaar zijn, een sleutel niet.** Toegang zonder
+  account gaat met een apart, willekeurig token (gehasht opgeslagen), en bij
+  een misser dezelfde melding als bij een niet-bestaand nummer.
 
 ## Bestellingen
 
-**De bevestiging hangt aan de betaalstatus**, niet aan de terugkeerpagina. Een
-klant die zijn tabblad sluit heeft wél betaald.
-
-**Een webhook kan twee keer komen.** Zet een vinkje dat de mail verstuurd is,
-en zet dat vinkje pas ná een geslaagde verzending.
-
-**Mislukt de mail, dan is de bestelling er nog steeds.** Laat zo'n fout niet de
-afhandeling van de betaling omgooien, maar laat hem ook niet verdwijnen.
-
-**Bewaar wat de klant zag.** Prijs, korting en btw op het moment van bestellen
-horen in de bestelregel. De catalogus van morgen is geen bewijs van gisteren.
+- **De bevestiging hangt aan de betaalstatus**, niet aan de terugkeerpagina.
+- **Neveneffecten (mail, factuur, melding) via een outbox**, in dezelfde
+  transactie als de statusovergang geschreven en daarna verwerkt. Een
+  mislukte mail gooit de bestelling niet om en verdwijnt ook niet.
+- **Bewaar wat de klant zag**: prijs, korting, btw, valuta en aanbieding in de
+  bestelregel. De catalogus van morgen is geen bewijs van gisteren.

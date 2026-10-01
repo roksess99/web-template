@@ -1,40 +1,59 @@
 # Datamodel — wat er bewaard wordt, en wat bevroren
 
-Dit beschrijft de vorm van de gegevens, niet de tabellen. Vul de echte namen in
-zodra ze er zijn. Het gaat hier om de twee vragen die bij elke entiteit
-terugkomen:
+Autoriteit: datacontract (5). Dit beschrijft de vorm van de gegevens, niet de
+tabellen; vul de echte namen in zodra ze er zijn. Bij elke entiteit twee
+vragen:
 
 1. **Komt dit vers uit de catalogus, of is het bevroren?**
 2. **Wie kan dit tegelijk met iemand anders aanpassen?**
+
+Statussen en hun overgangen: `docs/STATE_MACHINES.md`. Waar het staat
+(database, nooit filesystem): `.claude/rules/database.md`.
+
+---
+
+## Geld in het model
+
+Elk bedrag is een integer in de kleinste eenheid **met valuta**
+(`.claude/rules/geld.md`). In de tabellen hieronder betekent `…Cents` steeds
+"integer minor units"; de valuta staat op de order (één valuta per order) of
+per bedrag als er meerdere markten zijn (D-14).
 
 ---
 
 ## De scheidslijn: vers versus bevroren
 
-**Alles wat de klant nog niet gekocht heeft komt vers.** Naam, prijs, voorraad
-en foto van een artikel worden bij élk verzoek opnieuw opgehaald. De winkelwagen
-bewaart daarom alleen een **verwijzing**, geen productgegevens:
+**Alles wat de klant nog niet gekocht heeft komt vers.** De winkelwagen
+bewaart alleen een verwijzing:
 
-```
-CartItem { productId, quantity, (bron als je meerdere catalogi hebt) }
+```text
+CartItem { productId, quantity, source? }
 ```
 
-Zo rekent een prijswijziging nooit een oude prijs af en toont een uitverkocht
-artikel zich ook zo. Dat is het hele punt.
+Zo rekent een prijswijziging nooit een oude prijs af.
 
 **Alles wat de klant wél gekocht heeft is bevroren.** Een bestelregel bewaart
-wat er op het scherm stond op het moment van bestellen:
+wat er op het scherm stond en waarmee gerekend is:
 
-```
-OrderLine { productId, naam, merk, artikelnummer,
-            priceCents, discountPercent, vatPercent, quantity }
+```text
+OrderLine {
+  productId, source, supplierOfferId,        // welke aanbieding — voor de inkoop
+  name, brand, sku, supplierSku,
+  quantity,
+  unitPriceCents,                            // incl. btw, vóór korting
+  discountCents, discountRuleId?,            // toegepast, niet gevraagd
+  allocatedOrderDiscountCents,               // aandeel van een kortingscode (D-15)
+  vatRateBasisPoints, vatCents,              // 2100 = 21,00 %
+  lineTotalCents,
+  supplierCostCents, supplierCostCurrency,   // kostprijs op het moment van bestellen
+  landedCostCents?                           // als D-16 dat definieert
+}
 ```
 
-De catalogus van morgen is geen bewijs van gisteren. Een artikel kan vervallen,
-van naam veranderen of duurder worden; de factuur van vorige maand moet
-hetzelfde blijven zeggen. **Dit is de fout die je niet meer kunt repareren**:
-wie alleen het artikelnummer bewaart, kan over een jaar niet meer vertellen wat
-hij verkocht heeft.
+De catalogus van morgen is geen bewijs van gisteren. **Dit is de fout die je
+niet meer kunt repareren**: wie alleen het artikelnummer bewaart, kan over een
+jaar niet meer vertellen wat hij verkocht heeft, tegen welke prijs, bij welke
+verkoper hij moest inkopen, en wat de marge was.
 
 ---
 
@@ -42,132 +61,165 @@ hij verkocht heeft.
 
 ### Product (niet opgeslagen — het contract van de adapter)
 
-Eén type waar de hele winkel mee werkt. De adapter vertaalt de leverancier
-hiernaartoe; componenten kennen alleen dit.
+Eén type waar de hele winkel mee werkt (`src/lib/catalog/types.ts`). De
+adapter vertaalt de leverancier hiernaartoe; componenten kennen alleen dit.
 
 | Veld | Opmerking |
 |---|---|
 | `id` | string, van de leverancier |
-| `slug` | leesbaar, met het id erin zodat hij terug te vertalen is |
+| `source` | welke catalogus, als er meer dan één is |
+| `slug` | leesbaar, met het id erin |
 | `name`, `brand` | |
-| `priceCents` | integer, inclusief btw |
-| `listPriceCents` | de "van"-prijs; alleen met 30 dagen geschiedenis |
-| `discountPercent` | wat er werkelijk is toegepast, niet wat er gevraagd was |
-| `availability` | drie toestanden, geen boolean: op voorraad, wordt besteld, uitverkocht |
-| `stock` | van de aanbieding waarvan ook de prijs komt |
-| `imageUrl` | mag ontbreken |
-| `specs` | de eigenschappen, met het label van de leverancier |
+| `price` | `Money`, incl. btw — de verkoopprijs na prijsregel, vóór actie |
+| `salePrice?` | `Money`, na actie; alleen als er een actie geldt |
+| `referencePrice?` | `Money`, de "van"-prijs; alleen met voldoende prijsgeschiedenis (`docs/PRIJZEN.md`) |
+| `discountPercent?` | wat werkelijk is toegepast, naar beneden afgerond |
+| `vatRateBasisPoints` | |
+| `availability` | `in_stock` / `backorder` / `out_of_stock` — geen boolean |
+| `stock` | van de gekozen aanbieding |
+| `offerId` | de gekozen aanbieding (prijs, voorraad en levertijd komen hiervandaan) |
+| `imageUrl?` | mag ontbreken |
+| `specs` | eigenschappen met het label van de leverancier |
 
-**Verzin geen extra velden in een component.** Ontbreekt er iets, dan verandert
-dit type — en dan ziet iedereen meteen wat er allemaal op vastzit.
+`supplierCost` zit **niet** in het publieke `Product` dat naar componenten
+gaat; de pricing-laag krijgt het via een server-only type.
 
 ### Order
 
 | Veld | Opmerking |
 |---|---|
+| `id` | intern |
 | `reference` | het nummer dat de klant ziet; mag raadbaar zijn |
-| `accessToken` | de sleutel waarmee hij zijn bestelling terugvindt; mag dat **niet** |
-| klantgegevens | naam, adres, mail, telefoon |
+| `accessTokenHash` | hash van het token in de statuslink; het token zelf wordt niet opgeslagen |
+| `checkoutAttemptId` | idempotentiesleutel, uniek (`docs/IDEMPOTENCY.md`) |
+| `status`, `holdReason?` | `docs/STATE_MACHINES.md` |
+| `currency` | ISO 4217 |
+| klantgegevens | naam, adres, mail, telefoon — zie `docs/PRIVACY.md` voor termijnen |
 | `lines[]` | bevroren, zie boven |
-| bedragen | subtotaal, verzendkosten, korting, btw, totaal — allemaal in centen |
-| `status` | aangemaakt → betaald → verzonden |
-| `paymentId` | van de betaaldienst; nodig voor een terugbetaling |
-| `notifiedAt` | wanneer de bevestiging eruit ging — zodat hij niet twee keer gaat |
-| `purchasedAt` | wanneer er bij de leverancier is ingekocht |
+| bedragen | subtotaal, verzendkosten (+ btw), korting, btw per tarief, totaal |
+| `snapshotExpiresAt` | tot wanneer de bevroren bedragen betaald mogen worden |
+| `discountCodeId?` | |
+| `createdAt`, `paidAt`, `completedAt` | |
 
-Twee velden die je pas mist als je ze niet hebt: `notifiedAt` (een webhook kan
-twee keer komen) en `purchasedAt` (anders weet de eigenaar niet meer welke
-bestelling hij al heeft ingekocht).
+Bijbehorend: `order_events` (append-only statuslog), `payments`,
+`refunds`, `supplier_orders`, `returns`, `outbox`.
 
-### Invoice
+### Payment, Refund, ProviderEvent
 
-Apart van de bestelling, met een **eigen opeenvolgende nummerreeks zonder
-gaten**. Dat is een eis van de belastingdienst, geen voorkeur. Het nummer komt
-uit een teller in de database, in dezelfde transactie als de factuur zelf.
+| Entiteit | Kernvelden |
+|---|---|
+| `Payment` | `id` (= idempotentiesleutel), `orderId`, `status`, `amountCents`, `currency`, `provider`, `providerPaymentId?`, `method?`, timestamps |
+| `Refund` | `id` (= idempotentiesleutel), `orderId`, `paymentId`, `returnId?`, `status`, `amountCents`, `currency`, `reason`, `requestedBy`, `providerRefundId?` |
+| `ProviderEvent` | `provider`, `eventId` (uniek), `type`, `receivedAt`, `processedAt?`, `payloadHash` — geen volledige kaartgegevens |
 
-Een creditfactuur bij een terugbetaling heeft een **eigen reeks**. Een
-terugboeking zonder creditfactuur klopt niet in de boekhouding. De opbouw van
-het document staat in `docs/FACTUUR.md`.
+**Terugbetaald bedrag wordt afgeleid** (som van refunds `SUCCEEDED`), niet als
+los veld op de order bijgehouden.
 
-### DiscountRule
-
-Een regel wijst een **groep** aan, geen lijst artikelen. "15% op categorie X"
-is één rij, geen tweehonderd. Dat scheelt opslag en vooral werk bij het
-bijhouden van prijzen.
+### SupplierOrder
 
 | Veld | Opmerking |
 |---|---|
-| `scope` | product / groep / soort / hele familie |
-| `target` | waar hij op slaat |
-| `percent` | |
+| `id` | idempotentiesleutel bij automatisch inkopen |
+| `orderId`, `source`, `lines[]` | welke regels, via welke aanbieding |
+| `status` | `docs/STATE_MACHINES.md` |
+| `supplierOrderRef?` | het nummer bij de leverancier |
+| `actualCostCents?`, `currency` | wat het werkelijk kostte — afwijking van de snapshot is een signaal |
+| `placedBy`, `placedAt` | |
+
+### Invoice en CreditNote
+
+Eigen nummerreeks, uit een teller in de database, in dezelfde transactie als
+het document. Een creditnota bij elke terugbetaling, met verwijzing naar de
+oorspronkelijke factuur. Inhoud, nummerbeleid en wettelijke status:
+`docs/FACTUUR.md`. Een uitgereikte factuur wordt nooit gewijzigd.
+
+### DiscountRule en DiscountCode
+
+Een regel wijst een **groep** aan, geen lijst artikelen.
+
+| Veld | Opmerking |
+|---|---|
+| `scope`, `target` | product / groep / soort / familie, en welke |
+| `percent` | geldig bereik 1–95; daarbuiten geweigerd |
 | `startsAt`, `endsAt` | |
 | `disabledAt` | **stoppen is niet weggooien** |
 
-Een afgelopen actie blijft staan met een einddatum. Weggooien betekent dat je
-over een half jaar niet meer kunt verklaren waarom een oude bestelling die
-prijs had.
+Codes: zie `docs/PRIJZEN.md` § Kortingscodes; gebruik in
+`discount_redemptions` met een unieke sleutel.
 
 ### PriceHistory
 
-Per artikel per dag de prijs. Dit is wat de wettelijke "van"-prijs mogelijk
-maakt: de laagste prijs van de afgelopen 30 dagen. **Begin hier vroeg mee** —
-een geschiedenis die je vandaag niet opbouwt, heb je over dertig dagen nog
-steeds niet.
+De basis voor de "van"-prijs en voor het reconstrueren van een prijs achteraf.
+Het gaat om **onze verkoopprijs**, niet de inkoopprijs van de leverancier.
+
+| Veld | Opmerking |
+|---|---|
+| `productId`, `source` | |
+| `priceCents`, `currency` | de verkoopprijs incl. btw zoals de klant hem zag, vóór actie |
+| `market` | land/kanaal als prijzen per markt verschillen (D-14) |
+| `observedAt` | tijdstip van de meting (UTC) |
+| `sourceOfObservation` | `scheduled_snapshot` / `price_rule_change` / `order` |
+| `ruleVersion?` | welke prijsregel gold |
+
+Unieke sleutel `(productId, source, market, observedAt::date, sourceOfObservation)`
+voor de dagelijkse meting. Bewaartermijn: D-24 (minimaal de referentieperiode
+plus marge, langer als bewijs bij een geschil gewenst is).
 
 ### Return
 
 | Veld | Opmerking |
 |---|---|
 | `reference` | eigen nummer |
-| `orderReference` | |
-| `emailKey` | waarmee de aanvraag gecontroleerd is |
-| `reason` | herroeping / verkeerd geleverd / beschadigd / defect |
-| `lines[]` | wat er terugkomt, met aantallen |
-| `status` | aangevraagd → ontvangen → terugbetaald / afgewezen |
-| `refundedCents` | **wat de betaaldienst zegt te hebben teruggeboekt** |
+| `orderId` | |
+| `status` | `docs/STATE_MACHINES.md` |
+| `reason` | herroeping / verkeerd geleverd / beschadigd / defect — bepaalt wie de verzending betaalt |
+| `lines[]` | welke regels, welke aantallen |
+| `verifiedBy` | hoe de aanvraag gecontroleerd is (ordernummer + mailadres) |
 
-De reden is geen administratie maar bepaalt wie de verzendkosten draagt.
+Een unieke sleutel zorgt voor **één open retour per bestelling**.
+
+### Admin, Session, AuditLog
+
+| Entiteit | Kernvelden |
+|---|---|
+| `AdminUser` | `email`, `passwordHash`, `totpSecretEncrypted`, `permissions[]`, `disabledAt?` |
+| `RecoveryCode` | `adminId`, `codeHash`, `usedAt?` |
+| `Session` | `idHash`, `adminId`, `createdAt`, `lastSeenAt`, `expiresAt`, `ip?`, `userAgent?` |
+| `AuditLog` | `actor`, `action`, `objectType`, `objectId`, `before?`, `after?`, `reason?`, `requestId`, `at` — alleen toevoegen |
 
 ---
 
 ## Waar twee verzoeken elkaar raken
 
-Dit is de lijst waar een unieke sleutel of een transactie omheen moet. Een
-controle in code is hier niet genoeg: tussen lezen en schrijven past een tweede
-verzoek, en twee tabbladen zijn geen randgeval.
+Een controle in code is hier niet genoeg: tussen lezen en schrijven past een
+tweede verzoek.
 
-| Wat | Waarom het misgaat |
+| Wat | Mechanisme |
 |---|---|
-| Factuurnummer | twee bestellingen krijgen hetzelfde nummer |
-| "Eén kortingscode per klant" | twee tabbladen gebruiken hem allebei |
-| "Er loopt al een retour" | twee aanvragen, twee terugbetalingen, één pakket |
-| Voorraad bij het afrekenen | twee klanten kopen hetzelfde laatste stuk |
-| De nachtelijke taak | draait twee keer en meet dubbel |
-
-**Het gereedschap:** een unieke sleutel in de database waar dat kan, en anders
-een transactie die de rij vergrendelt. Laat de database het uitmaken.
-
----
-
-## Migraties
-
-- Genummerd, en **alleen toevoegend**. Een kolom weghalen doe je in een aparte
-  migratie, ná de code die hem niet meer gebruikt.
-- Elke migratie draait één keer en is te herhalen zonder schade.
-- Hou een script dat verbinding én schema nakijkt, en draai het na elke deploy.
-- Test een onbekende databasemogelijkheid eerst op een wegwerptabel. Gedeelde
-  hosting staat niet alles toe, en dat merk je anders pas bij de deploy.
+| Factuurnummer | teller met vergrendelde rij, zelfde transactie |
+| Order aanmaken (dubbele klik) | unieke `checkoutAttemptId` |
+| Webhook dubbel | unieke `(provider, eventId)` |
+| "Eén kortingscode per klant" | unieke `(codeId, klantsleutel)` |
+| "Er loopt al een retour" | unieke open retour per order |
+| Terugbetaalsom ≤ betaald | vergrendelde orderrij tijdens het aanmaken van een refund |
+| Statusovergang | compare-and-set op status |
+| Voorraad bij het afrekenen | D-22 |
+| Geplande taak | claim/lease in `job_runs` |
 
 ---
 
 ## Bewaren en opruimen
 
-| Gegeven | Termijn | Waarom |
-|---|---|---|
-| Bestellingen en facturen | 7 jaar (NL) | fiscale bewaarplicht |
-| Verlopen sessies | opruimen | ze stapelen op en niemand kijkt ernaar |
-| Prijsgeschiedenis | ~90 dagen | 30 nodig, de rest is marge |
-| Logboek van beheerhandelingen | zolang het account bestaat | |
+Termijnen zijn deels wettelijk en deels beleid; de grondslag per gegeven staat
+in `docs/PRIVACY.md`.
 
-Zet het opruimen in dezelfde dagelijkse taak als de rest. Een opruimfunctie die
-nergens wordt aangeroepen is geen opruimfunctie — controleer dat ook echt.
+| Gegeven | Termijn | Soort |
+|---|---|---|
+| Facturen en de gegevens waaruit ze volgen | 7 jaar (NL) | `WETTELIJK` — fiscale bewaarplicht (art. 52 AWR); laten bevestigen |
+| Verlopen sessies | opruimen | `BELEID` |
+| Prijsgeschiedenis | D-24 | `BELEID` |
+| Auditlog | D-24 | `BELEID` |
+| Provider-events | zolang de betaling kan worden betwist | `BELEID` (D-24) |
+
+Opruimen in de dagelijkse taak — en controleer dat de functie echt wordt
+aangeroepen. Migraties en compatibiliteit: `.claude/rules/database.md`.

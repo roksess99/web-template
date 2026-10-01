@@ -1,8 +1,12 @@
-# Uitrollen — lees dit vóór de eerste deploy
+# Hosting — waarnemingen uit een eerder project
 
-Alles hieronder is één keer misgegaan. Een gedeelde hostingomgeving
-is geen kleinere versie van je eigen machine; hij knijpt op plekken die je op
-je laptop nooit tegenkomt.
+**Status van dit document:** referentie, `EERDER WAARGENOMEN`. Alles hieronder
+is in een vorig project misgegaan, op gedeelde hosting met een
+serverrenderend Node-framework, pnpm en MariaDB. Het is **providerspecifiek**
+en niet opnieuw gemeten. Gebruik het als lijst van dingen om te **meten** voor
+de keuze bij D-00 en D-06 — niet als feiten over jouw omgeving.
+
+Het generieke uitrolproces staat in `docs/CI_CD.md`.
 
 ## 1. De bouw draait op een machine die minder mag
 
@@ -75,7 +79,7 @@ beheerpaneel zonder database ook.
 ## 5. Wat de database wel en niet kan
 
 Gedeelde MySQL-/MariaDB-accounts hebben beperkingen die nergens gedocumenteerd
-staan. Eerder gemeten op een gedeeld MariaDB-account: **élke uitdrukking in
+staan. `EERDER WAARGENOMEN` op een gedeeld MariaDB-account: **élke uitdrukking in
 een gegenereerde kolom** werd geweigerd — ook de simpelste, ook in een nieuwe
 tabel.
 
@@ -98,28 +102,27 @@ voor het hele internet.
 
 ## 7. Secrets
 
-- `.env` staat **niet** in Git. `.env.example` wél — zet daar dus nooit een
-  echte sleutel of een wachtwoord in.
-- Staat er ooit toch een sleutel in de geschiedenis: **roteren**, niet
-  verwijderen. Een commit weghalen haalt de sleutel niet uit de kopieën die
-  anderen al hebben.
-- Zet de sleutels in het paneel van de hostingpartij, niet in een bestand dat
-  je upload.
+Zet de sleutels in het paneel of de secret-opslag van de hostingpartij, niet
+in een bestand dat je uploadt. De overige regels: `.claude/rules/beveiliging.md`
+§ Secrets.
 
 ## 8. Geplande taken
 
-Heb je dagelijks werk (prijzen meten, uitnodigingen sturen), draai dat dan via
-een adres dat door een cron-taak wordt aangeroepen, met een token in de header.
-Eén adres dat alle dagelijkse taken doet is makkelijker te beheren dan vijf.
+Gedeelde hosting biedt vaak alleen cron die een URL aanroept. Eén adres dat
+alle dagelijkse taken doet is makkelijker te beheren dan vijf. Beveiliging en
+claimen: `.claude/rules/beveiliging.md` § Geplande taken en
+`docs/IDEMPOTENCY.md`.
 
-Zorg dat zo'n taak **zichzelf niet twee keer kan draaien**: laat de eerste de
-dag claimen in de database, en de rest overslaan.
+## 9. Wat je vóór de keuze meet
 
-## 9. De lijst voor elke deploy
+- [ ] Bouwt het framework op de doelomgeving (processen, geheugen)?
+- [ ] Werken de dependencies zonder native compilatie, of is die beschikbaar?
+- [ ] Overleeft `node_modules` de deploymethode (symlinks)?
+- [ ] Welke databasefuncties zijn toegestaan (gegenereerde kolommen,
+      `SELECT … FOR UPDATE`, transacties)? Op een wegwerptabel.
+- [ ] Hoe draaien migraties, en wie draait ze?
+- [ ] Hoe worden backups gemaakt, en is een restore te testen?
+      (`docs/DISASTER_RECOVERY.md`)
+- [ ] Is de webhook-URL van buitenaf bereikbaar (D-05)?
 
-- [ ] `pnpm typecheck`, `pnpm lint`, `pnpm build` lokaal groen
-- [ ] `pnpm audit` zonder meldingen
-- [ ] Migraties gedraaid, schema nagekeken
-- [ ] Omgevingsvariabelen compleet op de server (vergelijk met `.env.example`)
-- [ ] Na de deploy: een bestelling doorlopen tot aan het betaalscherm
-- [ ] Na de deploy: één mail laten versturen en controleren of hij aankomt
+Elke uitkomst met `GEMETEN` en een datum bij D-00.

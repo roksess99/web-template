@@ -1,12 +1,17 @@
 # Lijst voor livegang — <<SHOP>>
 
-Niet afvinken wat je niet zelf gecontroleerd hebt.
+Niet afvinken wat je niet zelf gecontroleerd hebt. Stappen met een echte
+betaling, terugbetaling, inkooporder of productie-uitrol voert **de eigenaar**
+uit, niet Claude.
 
 ## Juridisch — dit moet er staan vóór de eerste bestelling
 
+`WETTELIJK`-punten: laten bevestigen door een adviseur voor de markt van de
+winkel. Dit is een herinneringslijst, geen juridisch advies.
+
 - [ ] **Bedrijfsgegevens** op de site: handelsnaam, adres, mailadres, KvK- en
-      btw-nummer. Een webwinkel zonder deze gegevens is in overtreding, en het
-      is ook het eerste waar een klant naar zoekt als hij twijfelt.
+      btw-nummer (`WETTELIJK`: o.a. BW 3:15d en 6:230m). Het is ook het eerste
+      waar een klant naar zoekt als hij twijfelt.
 - [ ] **Algemene voorwaarden**, bereikbaar vóór het afrekenen.
 - [ ] **Privacyverklaring** die klopt met `docs/PRIVACY.md`, met een datum.
 - [ ] **Herroepingsrecht**: 14 dagen, duidelijk benoemd, met het modelformulier
@@ -17,8 +22,8 @@ Niet afvinken wat je niet zelf gecontroleerd hebt.
       "Versturen".
 - [ ] Bevestiging per mail met: wat er besteld is, het bedrag, de btw, het
       herroepingsrecht en de bedrijfsgegevens.
-- [ ] Is er een "van/voor"-prijs? Dan moet de referentie de laagste prijs van
-      de afgelopen 30 dagen zijn, en die moet je dus al meten.
+- [ ] Is er een "van/voor"-prijs? Dan de referentieprijs volgens
+      `docs/PRIJZEN.md` § De "van"-prijs, en de geschiedenis moet al lopen.
 - [ ] Beoordelingen? Dan geen selectie op gunstigheid, en alleen van mensen die
       echt gekocht hebben.
 
@@ -33,13 +38,16 @@ Niet afvinken wat je niet zelf gecontroleerd hebt.
 
 ## Betalen
 
-- [ ] Testbetaling gedaan met een echte methode, in de live omgeving.
-- [ ] Webhook komt aan en wordt twee keer verwerkt zonder dubbele mail.
-- [ ] Een afgebroken betaling laat geen half afgeronde bestelling achter.
-- [ ] **Een terugbetaling één keer echt uitgevoerd.** Dit is de stap die
-      iedereen overslaat omdat hij geld kost; doe hem met een klein bedrag.
+- [ ] Testbetaling met een echte methode in de live omgeving (eigenaar).
+- [ ] Webhook komt aan, handtekening wordt geverifieerd, en een tweede
+      bezorging levert geen dubbele mail.
+- [ ] Een afgebroken betaling laat de order in `PAYMENT_FAILED` of
+      `PENDING_PAYMENT`, en verloopt netjes naar `CANCELLED`.
+- [ ] Reconciliatie draait en vindt een bewust gemiste webhook terug.
+- [ ] **Een terugbetaling één keer echt uitgevoerd** (eigenaar, klein bedrag).
       Alles eromheen testen bewijst niet dat de keten werkt.
-- [ ] Het bedrag dat de betaaldienst ziet komt van de server.
+- [ ] Het bedrag dat de betaaldienst ziet komt uit de bevroren snapshot.
+- [ ] De live-sleutel staat alleen in productie.
 
 ## Mail
 
@@ -65,10 +73,29 @@ Niet afvinken wat je niet zelf gecontroleerd hebt.
       Roteren.
 - [ ] Beheerpaneel op noindex en uit de sitemap en robots.
 - [ ] Inloggen met tweede factor.
-- [ ] Beveiligingsheaders ingesteld (clickjacking, mimetype-raden,
-      verwijzerbeleid).
-- [ ] Een limiet op formulieren die mail of externe calls veroorzaken.
+- [ ] Beveiligingsheaders en CSP ingesteld (`.claude/rules/beveiliging.md`).
+- [ ] Een limiet op inloggen, codes en formulieren die mail of externe calls
+      veroorzaken.
 - [ ] Database niet open voor het hele internet.
+- [ ] Autorisatie- en IDOR-tests groen (`docs/TESTEN.md`).
+- [ ] `docs/THREAT_MODEL.md` nagelopen voor de gekozen providers.
+
+## Operations
+
+- [ ] `main` beschermd op de remote; CI vereist voor merge (`docs/CI_CD.md`).
+- [ ] Health checks (`/healthz`, `/readyz`) en de alerts uit
+      `docs/OBSERVABILITY.md` werken — één alert bewust laten afgaan.
+- [ ] Error tracking ontvangt een testfout, zonder persoonsgegevens.
+- [ ] Backups draaien én **een restore is getest** (`docs/DISASTER_RECOVERY.md`).
+- [ ] Rollback van een release geoefend.
+- [ ] Opstartvalidatie weigert te starten bij een ontbrekende variabele.
+
+## Toegankelijkheid
+
+- [ ] Checkout volledig met toetsenbord en met een schermlezer doorlopen.
+- [ ] Contrasttabel in `docs/BRAND.md` ingevuld voor licht en donker.
+- [ ] Factuur-PDF getagd (`docs/ACCESSIBILITY.md`).
+- [ ] D-20 (juridische toepasselijkheid) beantwoord.
 
 ## Techniek
 
