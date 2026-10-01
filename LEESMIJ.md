@@ -5,8 +5,12 @@ half jaar bouwen aan een eerdere dropship-winkel heeft opgeleverd: niet het
 assortiment, maar de dingen die bij élke webshop met een leverancier-API
 terugkomen.
 
-Kopieer deze map naar de wortel van het nieuwe project. Daarna hoort het
-volgende te gebeuren, in deze volgorde.
+**Beginnen doe je met `START-PROMPT.md`:** plak dat bestand als eerste bericht
+in Claude Code in het nieuwe, lege project. Dan leest hij deze set, zet hem op
+de goede plek en vertelt hij je wat er beslist moet worden voordat er code
+komt.
+
+De rest van dit bestand beschrijft wat er daarna gebeurt, in deze volgorde.
 
 ## 1. De plaatshouders invullen
 
